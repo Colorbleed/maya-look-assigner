@@ -104,12 +104,3 @@ class View(QtWidgets.QTreeView):
                 api.update(item, version)
             # refresh model when done
             self.data_changed.emit()
-
-    def _queue_look_assignment(self):
-        # get the selected asset(s)
-        # get the selected look(s)
-
-        active = self.currentIndex()  # index under mouse
-        active = active.sibling(active.row(), 0)  # get first column
-
-        print(active)
