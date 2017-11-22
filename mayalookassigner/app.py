@@ -32,7 +32,7 @@ class App(QtWidgets.QWidget):
         """Refresh the content"""
 
         # Get all containers and information
-        items = commands.get_selection()
+        items = commands.get_selected_assets()
         self.container_model.clear()
         if items:
             # Add all found containers to the models for display
@@ -46,7 +46,7 @@ class App(QtWidgets.QWidget):
 
         # Container overview
         container_widget = QtWidgets.QWidget()
-        container_title = QtWidgets.QLabel("Selection")
+        container_title = self._create_label("Assets")
         container_layout = QtWidgets.QVBoxLayout()
 
         container_model = models.ContainerModel()
@@ -55,9 +55,11 @@ class App(QtWidgets.QWidget):
         container_view.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
 
         from_selection_btn = QtWidgets.QPushButton("Get Looks From Selection")
+        from_all_asset_btn = QtWidgets.QPushButton("Get Looks From All Assets")
 
-        container_layout.addWidget(from_selection_btn)
         container_layout.addWidget(container_title)
+        container_layout.addWidget(from_selection_btn)
+        container_layout.addWidget(from_all_asset_btn)
         container_layout.addWidget(container_view)
 
         # Add container view
@@ -69,10 +71,12 @@ class App(QtWidgets.QWidget):
         look_views_layout = QtWidgets.QVBoxLayout()
 
         # Looks from database
-        documents_title = QtWidgets.QLabel("Available looks")
+        documents_title = self._create_label("Available looks")
+        documents_title.setAlignment(QtCore.Qt.AlignCenter)
         document_model = models.FlatModel()
         document_view = views.View()
         document_view.setModel(document_model)
+        document_view.setMinimumHeight(230)
 
         look_views_layout.addWidget(documents_title)
         look_views_layout.addWidget(document_view)
@@ -81,9 +85,11 @@ class App(QtWidgets.QWidget):
         queue_off_message = QtWidgets.QLabel(
             "Queue is empty, add items to the queue to active it")
         queue_off_message.setAlignment(QtCore.Qt.AlignCenter)
+        queue_off_message.setStyleSheet("font-size: 12px;")
 
         # Queue view
-        queue_title = QtWidgets.QLabel("Queue")
+        queue_title = self._create_label("Queue")
+        queue_title.setAlignment(QtCore.Qt.AlignCenter)
         queue_model = models.LookQueueModel()
         queue_view = views.View()
         queue_view.setModel(queue_model)
@@ -115,6 +121,8 @@ class App(QtWidgets.QWidget):
         queue_view.setColumnWidth(0, 200)
 
         self.from_selection_btn = from_selection_btn
+        self.from_all_asset_btn = from_all_asset_btn
+
         self.assign_to_selected_btn = assign_to_selected_btn
         self.assign_to_all_btn = assign_to_all_btn
 
@@ -140,6 +148,7 @@ class App(QtWidgets.QWidget):
 
         # Buttons
         self.from_selection_btn.clicked.connect(self.refresh)
+        self.from_all_asset_btn.clicked.connect(self._get_all_assets)
         self.assign_to_all_btn.clicked.connect(self._apply_from_queue)
         self.assign_to_selected_btn.clicked.connect(self._apply_from_selection)
 
@@ -200,6 +209,15 @@ class App(QtWidgets.QWidget):
 
         menu.exec_(globalpos)
 
+    def _create_label(self, text):
+        """Lazy function to create a label"""
+
+        title = QtWidgets.QLabel(text)
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        title.setStyleSheet("font-weight: bold; font-size: 12px")
+
+        return title
+
     def _on_container_selection_changed(self):
 
         all_documents = []
@@ -218,6 +236,14 @@ class App(QtWidgets.QWidget):
 
         self.document_model.clear()
         self.document_model.add_items(all_documents)
+
+    def _get_all_assets(self):
+
+        items = commands.get_all_assets()
+        self.container_model.clear()
+        self.container_view.setVisible(False)
+        self.container_model.add_items(items)
+        self.container_view.setVisible(True)
 
     def _create_queue_items(self):
         """Create a queue item based on the selection"""
