@@ -242,3 +242,31 @@ def get_asset_data(objectId):
         return
 
     return asset
+
+
+def remove_unused_looks():
+    """Removes all loaded looks for which none of the shaders are used.
+
+    This will cleanup all loaded "LookLoader" containers that are unused in
+    the current scene.
+
+    """
+
+    host = api.registered_host()
+
+    unused = list()
+    for container in host.ls():
+        if container['loader'] == "LookLoader":
+            members = cmds.sets(container['objectName'], query=True)
+            look_sets = cmds.ls(members, type="objectSet")
+            for look_set in look_sets:
+                # If the set is used than we consider this look *in use*
+                if cmds.sets(look_set, query=True):
+                    break
+            else:
+                unused.append(container)
+
+    for container in unused:
+        log.warning("Removing unused look container: %s",
+                    container['objectName'])
+        api.remove(container)
