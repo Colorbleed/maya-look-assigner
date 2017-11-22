@@ -125,6 +125,7 @@ class App(QtWidgets.QWidget):
 
         self.assign_to_selected_btn = assign_to_selected_btn
         self.assign_to_all_btn = assign_to_all_btn
+        self.remove_unused_btn = remove_unused_btn
 
         self.container_model = container_model
         self.container_view = container_view
@@ -151,6 +152,7 @@ class App(QtWidgets.QWidget):
         self.from_all_asset_btn.clicked.connect(self._get_all_assets)
         self.assign_to_all_btn.clicked.connect(self._apply_from_queue)
         self.assign_to_selected_btn.clicked.connect(self._apply_from_selection)
+        self.remove_unused_btn.clicked.connect(commands.remove_unused_looks)
 
         # Set menu triggers
         self.document_view.customContextMenuRequested.connect(
