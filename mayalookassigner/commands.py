@@ -10,7 +10,7 @@ from avalon import io, api
 log = logging.getLogger(__name__)
 
 
-def get_selection():
+def get_selected_assets():
     """Get information from current selection"""
 
     # TODO: Investigate how we can make `long` argument work
@@ -28,24 +28,38 @@ def get_selection():
             raise RuntimeError("No items selected with loaded content")
 
     for container, content in containers.iteritems():
-        # Get top node of loaded items
-        id_hash = create_asset_id_hash(content)
-        topnode = cblib.get_container_transforms({"objectName": container},
-                                                 root=True)
-
-        try:
-            _id = id_hash.keys()[0]
-        except IndexError:
+        # Create an item for the tool
+        item = create_item_from_container(container, content)
+        if not item:
             continue
 
-        asset = io.find_one({"_id": io.ObjectId(_id)},
-                            projection={"name": True})
+        items.append(item)
 
-        looks = fetch_looks([_id])
-        items.append({"asset": asset,
-                      "objectName": topnode,
-                      "looks": looks,
-                      "_id": _id})
+    return items
+
+
+def get_all_assets():
+    """Get all assets from the scene
+
+    Returns:
+        list
+    """
+
+    host = api.registered_host()
+
+    items = []
+    for container in host.ls():
+        # We are not interested in looks but assets!
+        if container["loader"] == "LookLoader":
+            continue
+        # Gather all information
+        container_name = container["objectName"]
+        content = cmds.sets(container_name, query=True)
+        item = create_item_from_container(container_name, content)
+        if not item:
+            continue
+
+        items.append(item)
 
     return items
 
@@ -115,6 +129,35 @@ def create_asset_id_hash(nodes):
         node_id_hash[asset_id].append(node)
 
     return node_id_hash
+
+
+def create_item_from_container(objectname, content):
+    """Create an item for the view based the container and content of it
+
+    It fetches the look document based on the asset ID found in the content.
+    The item will contain all important information for the tool to work.
+
+    Args:
+        objectname(str): name of the objectSet (container)
+        content (list): list of items which are in the
+    """
+
+    id_hash = create_asset_id_hash(content)
+    topnode = cblib.get_container_transforms({"objectName": objectname},
+                                             root=True)
+
+    try:
+        _id = id_hash.keys()[0]
+    except IndexError:
+        return {}
+
+    asset = io.find_one({"_id": io.ObjectId(_id)}, projection={"name": True})
+    looks = fetch_looks([_id])
+
+    return {"asset": asset,
+            "objectName": topnode,
+            "looks": looks,
+            "_id": _id}
 
 
 def fetch_looks(asset_ids):
