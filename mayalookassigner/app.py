@@ -14,7 +14,7 @@ class App(QtWidgets.QWidget):
 
         self.log = logging.getLogger(__name__)
 
-        self.setWindowTitle("Assign Look 2.0")
+        self.setWindowTitle("Look Manager 1.0")
         self.resize(900, 500)
 
         self.apply_button = None
