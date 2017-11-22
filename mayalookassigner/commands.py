@@ -144,6 +144,7 @@ def create_item_from_container(objectname, content):
 
     id_hash = create_asset_id_hash(content)
     topnode = cblib.get_container_transforms({"objectName": objectname},
+                                             members=content,
                                              root=True)
 
     try:
