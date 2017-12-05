@@ -1,8 +1,13 @@
+import sys
 import logging
 
-from avalon.vendor.Qt import QtWidgets, QtCore
+from avalon.tools import lib as tools_lib
+from avalon.vendor.Qt import QtWidgets, QtCore, QtGui
 
 from . import commands, models, views, proxy
+
+module = sys.modules[__name__]
+module.window = None
 
 
 class App(QtWidgets.QWidget):
@@ -14,6 +19,7 @@ class App(QtWidgets.QWidget):
 
         self.log = logging.getLogger(__name__)
 
+        self.setObjectName("lookManager")
         self.setWindowTitle("Look Manager 1.0")
         self.resize(900, 500)
 
@@ -359,15 +365,24 @@ class App(QtWidgets.QWidget):
             commands.process_queued_item(item)
 
 
-def main():
-    global application
-    application = App()
-    application.show()
+def show(root=None, debug=False, parent=None):
+    """Display Loader GUI
 
+    Arguments:
+        debug (bool, optional): Run loader in debug-mode,
+            defaults to False
 
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    w = App()
-    w.show()
-    app.exec_()
+    """
+
+    try:
+        module.window.close()
+        del module.window
+    except (RuntimeError, AttributeError):
+        pass
+
+    with tools_lib.application():
+        window = App(parent)
+        window.show()
+        window.refresh()
+
+        module.window = window
