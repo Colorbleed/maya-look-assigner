@@ -1,4 +1,4 @@
-from app import App, main
+from app import App, show
 
 
-__all__ = ["App", "main"]
+__all__ = ["App", "show"]
