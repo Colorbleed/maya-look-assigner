@@ -17,17 +17,17 @@ def get_selected_assets():
 
     items = []
     selection = cmds.ls(selection=True)
-    if not selection:
-        return
 
     containers = get_containers(selection)
     if not containers:
-        hierarchy = cmds.listRelatives(selection, allDescendents=True)
+        hierarchy = cmds.listRelatives(selection, allDescendents=True) or []
         containers = get_containers(hierarchy)
         if not containers:
-            raise RuntimeError("No items selected with loaded content")
+            log.info("No items selected with loaded content")
+            return items
 
     for container, content in containers.iteritems():
+        # Ensure we have all
         # Create an item for the tool
         item = create_item_from_container(container, content)
         if not item:
@@ -80,14 +80,8 @@ def get_containers(nodes):
     for container in host.ls():
         container_object = container['objectName']
         members = set(cmds.sets(container_object, query=True) or [])
-        contained = nodes.intersection(members)
-        if contained:
-            nodes -= contained
-            results[container_object] = list(contained)
-
-        if not nodes:
-            # We've found all nodes
-            break
+        if nodes.intersection(members):
+            results[container_object] = list(members)
 
     return results
 
