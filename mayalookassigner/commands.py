@@ -1,5 +1,8 @@
-import logging
 from collections import defaultdict
+from copy import deepcopy
+import json
+import logging
+import os
 
 import maya.cmds as cmds
 
@@ -8,6 +11,10 @@ from avalon import io, api
 
 
 log = logging.getLogger(__name__)
+
+
+def get_workfolder():
+    return os.path.dirname(cmds.file(query=True, sceneName=True))
 
 
 def get_selected_assets():
@@ -237,6 +244,29 @@ def get_asset_data(objectId):
         return
 
     return asset
+
+
+def create_queue_data(queue_items):
+    """Create a json friendly data block"""
+
+    items = []
+    for item in queue_items:
+        # Ensure the io.ObjectId object is a string
+        new_item = deepcopy(item)
+        new_item["document"]["_id"] = str(item["document"]["_id"])
+        new_item["document"]["parent"] = str(item["document"]["parent"])
+        items.append(new_item)
+
+    return items
+
+
+def save_to_json(filepath, items):
+    """Store data in a json file"""
+
+    log.info("Writing queue file ...")
+    with open(filepath, "w") as fp:
+        json.dump(items, fp, ensure_ascii=False)
+    log.info("Successfully written file")
 
 
 def remove_unused_looks():
