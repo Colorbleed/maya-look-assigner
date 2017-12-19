@@ -20,6 +20,7 @@ class ContainerModel(model.TreeModel):
         self.beginResetModel()
 
         for item in items:
+            print item["asset"]
             item_node = model.Node()
             item_node.update(item)
             self.add_child(item_node)

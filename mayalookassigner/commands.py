@@ -246,7 +246,7 @@ def get_asset_data(objectId):
     return asset
 
 
-def create_queue_data(queue_items):
+def create_queue_out_data(queue_items):
     """Create a json friendly data block"""
 
     items = []
@@ -255,6 +255,19 @@ def create_queue_data(queue_items):
         new_item = deepcopy(item)
         new_item["document"]["_id"] = str(item["document"]["_id"])
         new_item["document"]["parent"] = str(item["document"]["parent"])
+        items.append(new_item)
+
+    return items
+
+
+def create_queue_in_data(queue_items):
+    """Create a database friendly data block for the tool"""
+    items = []
+    for item in queue_items:
+        new_item = deepcopy(item)
+        document = item["document"]
+        new_item["document"]["_id"] = io.ObjectId(document["_id"])
+        new_item["document"]["parent"] = io.ObjectId(document["parent"])
         items.append(new_item)
 
     return items

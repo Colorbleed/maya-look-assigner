@@ -1,3 +1,4 @@
+import json
 import sys
 import logging
 
@@ -23,7 +24,7 @@ class App(QtWidgets.QWidget):
 
         self.setObjectName("lookManager")
         self.setWindowTitle("Look Manager 1.1")
-        self.resize(900, 500)
+        self.resize(900, 530)
 
         self.apply_button = None
         self.refresh_button = None
@@ -120,7 +121,14 @@ class App(QtWidgets.QWidget):
         method_buttons_layout.addWidget(assign_to_all_btn)
         method_buttons_layout.addWidget(remove_unused_btn)
 
+        load_save_buttons_layout = QtWidgets.QHBoxLayout()
+        load_queue_btn = QtWidgets.QPushButton("Load Queue from File")
+        save_queue_btn = QtWidgets.QPushButton("Save Queue to File")
+        load_save_buttons_layout.addWidget(load_queue_btn)
+        load_save_buttons_layout.addWidget(save_queue_btn)
+
         look_views_layout.addLayout(method_buttons_layout)
+        look_views_layout.addLayout(load_save_buttons_layout)
         look_views_widget.setLayout(look_views_layout)
         splitter.addWidget(look_views_widget)
 
@@ -144,9 +152,11 @@ class App(QtWidgets.QWidget):
         self.document_view = document_view
 
         self.queue_widgets = queue_widgets
-
         self.queue_model = queue_model
         self.queue_view = queue_view
+
+        self.save_queue = save_queue_btn
+        self.load_queue = load_queue_btn
 
         self.setLayout(main_layout)
 
@@ -163,6 +173,9 @@ class App(QtWidgets.QWidget):
         self.assign_to_all_btn.clicked.connect(self._apply_from_queue)
         self.assign_to_selected_btn.clicked.connect(self._apply_from_selection)
         self.remove_unused_btn.clicked.connect(commands.remove_unused_looks)
+
+        self.save_queue.clicked.connect(self._on_save_queue)
+        self.load_queue.clicked.connect(self._on_load_queue)
 
         # Set menu triggers
         self.document_view.customContextMenuRequested.connect(
@@ -215,8 +228,7 @@ class App(QtWidgets.QWidget):
             menu.addSeparator()
 
         save_action = QtWidgets.QAction(menu, text="Save Queue")
-        save_action.setEnabled(False)
-        # save_action.triggered.connect(self.store_queue)
+        save_action.triggered.connect(self._on_save_queue)
 
         clear_action = QtWidgets.QAction(menu, text="Clear Queue")
         clear_action.triggered.connect(self._clear_queue)
@@ -226,7 +238,7 @@ class App(QtWidgets.QWidget):
 
         menu.exec_(globalpos)
 
-    def store_queue(self):
+    def _on_save_queue(self):
         """Store the created queue in a json file"""
 
         _dir = commands.get_workfolder()
@@ -245,8 +257,36 @@ class App(QtWidgets.QWidget):
             self.log.error("No queued items to store")
             return
 
-        queue_data = commands.create_queue_data(queued_items)
+        queue_data = commands.create_queue_out_data(queued_items)
         commands.save_to_json(filepath, {"queue": queue_data})
+
+    def _on_load_queue(self):
+
+        _dir = commands.get_workfolder()
+        fdialog = QtWidgets.QFileDialog()
+        filepath, ext = fdialog.getOpenFileName(self,
+                                                "Open File",
+                                                _dir,
+                                                "*.json")
+
+        with open(filepath, "r") as fp:
+            queue_data = json.load(fp)
+
+        if "queue" not in queue_data:
+            raise RuntimeError("Invalid queue data")
+
+        valid_items = []
+        items = commands.create_queue_in_data(queue_data["queue"])
+        for item in items:
+            if self._validate_queue_entry(item):
+                valid_items.append(item)
+
+        self.log.info("Found %d new item(s)" % len(valid_items))
+
+        if self.queue_widgets.currentIndex() != 1:
+            self.queue_widgets.setCurrentIndex(1)
+
+        self.queue_model.add_items(valid_items)
 
     def _create_label(self, text):
         """Lazy function to create a label"""
