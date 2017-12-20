@@ -1,5 +1,8 @@
-import logging
 from collections import defaultdict
+from copy import deepcopy
+import json
+import logging
+import os
 
 import maya.cmds as cmds
 
@@ -8,6 +11,10 @@ from avalon import io, api
 
 
 log = logging.getLogger(__name__)
+
+
+def get_workfolder():
+    return os.path.dirname(cmds.file(query=True, sceneName=True))
 
 
 def get_selected_assets():
@@ -210,7 +217,6 @@ def process_queued_item(entry):
     container_lookup = get_containers(asset_name)
     if not container_lookup:
         node_name = asset_name.split("|")[-1]
-        print node_name
         container_lookup = get_containers([node_name])
 
     containers = container_lookup.keys()
@@ -237,6 +243,42 @@ def get_asset_data(objectId):
         return
 
     return asset
+
+
+def create_queue_out_data(queue_items):
+    """Create a json friendly data block"""
+
+    items = []
+    for item in queue_items:
+        # Ensure the io.ObjectId object is a string
+        new_item = deepcopy(item)
+        new_item["document"]["_id"] = str(item["document"]["_id"])
+        new_item["document"]["parent"] = str(item["document"]["parent"])
+        items.append(new_item)
+
+    return items
+
+
+def create_queue_in_data(queue_items):
+    """Create a database friendly data block for the tool"""
+    items = []
+    for item in queue_items:
+        new_item = deepcopy(item)
+        document = item["document"]
+        new_item["document"]["_id"] = io.ObjectId(document["_id"])
+        new_item["document"]["parent"] = io.ObjectId(document["parent"])
+        items.append(new_item)
+
+    return items
+
+
+def save_to_json(filepath, items):
+    """Store data in a json file"""
+
+    log.info("Writing queue file ...")
+    with open(filepath, "w") as fp:
+        json.dump(items, fp, ensure_ascii=False)
+    log.info("Successfully written file")
 
 
 def remove_unused_looks():
