@@ -217,7 +217,6 @@ def process_queued_item(entry):
     container_lookup = get_containers(asset_name)
     if not container_lookup:
         node_name = asset_name.split("|")[-1]
-        print node_name
         container_lookup = get_containers([node_name])
 
     containers = container_lookup.keys()
