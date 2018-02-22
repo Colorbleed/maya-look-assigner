@@ -10,8 +10,6 @@ from . import commands, models, views
 module = sys.modules[__name__]
 module.window = None
 
-# Todo: implement load_queue logic and link store_queue to button
-
 
 class App(QtWidgets.QWidget):
 
@@ -23,7 +21,7 @@ class App(QtWidgets.QWidget):
         self.log = logging.getLogger(__name__)
 
         self.setObjectName("lookManager")
-        self.setWindowTitle("Look Manager 1.1")
+        self.setWindowTitle("Look Manager 1.2")
         self.resize(900, 530)
 
         self.apply_button = None
@@ -41,7 +39,7 @@ class App(QtWidgets.QWidget):
         """Refresh the content"""
 
         # Get all containers and information
-        items = commands.get_selected_assets()
+        items = commands.get_container_items_from_selection()
         self.container_model.clear()
         if items:
             # Add all found containers to the models for display
@@ -335,16 +333,18 @@ class App(QtWidgets.QWidget):
 
         items = []
         for data in containers:
-
-            asset_name = data["asset"]["name"]
+            asset_name = data["objectName"]
+            nodes = data["nodes"]
             for doc in documents:
                 version = doc["version"].get(asset_name, None)
                 if version is None:
                     continue
-                items.append({"asset": data["objectName"],
+
+                items.append({"asset": asset_name,
                               "subset": doc["subset"],
                               "version": version["name"],
-                              "document": version})
+                              "document": version,
+                              "nodes": nodes})
 
         return items
 
