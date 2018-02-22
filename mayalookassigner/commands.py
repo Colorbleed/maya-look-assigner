@@ -17,30 +17,19 @@ def get_workfolder():
     return os.path.dirname(cmds.file(query=True, sceneName=True))
 
 
-def get_selected_assets():
+def get_container_items_from_selection():
     """Get information from current selection"""
 
     # TODO: Investigate how we can make `long` argument work
 
     items = []
     selection = cmds.ls(selection=True)
+    hierarchy = cmds.listRelatives(selection,
+                                   allDescendents=True,
+                                   fullPath=True) or selection
 
-    containers = get_containers(selection)
-    if not containers:
-        hierarchy = cmds.listRelatives(selection, allDescendents=True) or []
-        containers = get_containers(hierarchy)
-        if not containers:
-            log.info("No items selected with loaded content")
-            return items
-
-    for container, content in containers.iteritems():
-        # Ensure we have all
-        # Create an item for the tool
-        item = create_item_from_container(container, content)
-        if not item:
-            continue
-
-        items.append(item)
+    view_items = create_items_from_selection(hierarchy)
+    items.extend(view_items)
 
     return items
 
@@ -62,11 +51,11 @@ def get_all_assets():
         # Gather all information
         container_name = container["objectName"]
         content = cmds.sets(container_name, query=True)
-        item = create_item_from_container(container_name, content)
-        if not item:
+        view_items = create_items_from_selection(content)
+        if not view_items:
             continue
 
-        items.append(item)
+        items.extend(view_items)
 
     return items
 
@@ -129,37 +118,49 @@ def create_asset_id_hash(nodes):
         asset_id = value.split(":")[0]
         node_id_hash[asset_id].append(node)
 
-    return node_id_hash
+    return dict(node_id_hash)
 
 
-def create_item_from_container(objectname, content):
+def create_items_from_selection(content):
     """Create an item for the view based the container and content of it
 
     It fetches the look document based on the asset ID found in the content.
     The item will contain all important information for the tool to work.
 
+    If there is an asset ID which is not registered in the project's collection
+    it will log a warning message.
+
     Args:
-        objectname(str): name of the objectSet (container)
-        content (list): list of items which are in the
+        content (list): list of items which are in the container or selection
+
+    Returns:
+        list of dicts
+
     """
 
-    id_hash = create_asset_id_hash(content)
-    topnode = cblib.get_container_transforms({"objectName": objectname},
-                                             members=content,
-                                             root=True)
+    asset_view_items = []
 
-    try:
-        _id = id_hash.keys()[0]
-    except IndexError:
-        return {}
+    id_hashes = create_asset_id_hash(content)
+    if not id_hashes:
+        return asset_view_items
 
-    asset = io.find_one({"_id": io.ObjectId(_id)}, projection={"name": True})
-    looks = fetch_looks([_id])
+    for _id, nodes in id_hashes.items():
+        asset = io.find_one({"_id": io.ObjectId(_id)},
+                            projection={"name": True})
 
-    return {"asset": asset,
-            "objectName": topnode,
-            "looks": looks,
-            "_id": _id}
+        # Skip if asset id is not found
+        if not asset:
+            log.warning("Id is not found in the database, skipping '%s'." % _id)
+            log.warning("Nodes: %s" % nodes)
+            continue
+
+        looks = fetch_looks([_id])
+        asset_view_items.append({"asset": asset,
+                                 "objectName": asset["name"],
+                                 "looks": looks,
+                                 "_id": _id,
+                                 "nodes": nodes})
+    return asset_view_items
 
 
 def fetch_looks(asset_ids):
@@ -183,12 +184,13 @@ def fetch_looks(asset_ids):
         # Verify if asset ID is correct
         asset = io.find_one({"_id": object_id}, projection={"name": True})
         if not asset:
-            raise ValueError("Could not find asset with objectId "
-                             "`{}`".format(asset_id))
+            log.error("Could not find asset with objectId `%s`" % asset_id)
+            return publish_looks
 
         # Get all data
         for subset in cblib.list_looks(object_id):
-            version = io.find_one({"type": "version", "parent": subset["_id"]},
+            version = io.find_one({"type": "version",
+                                   "parent": subset["_id"]},
                                    projection={"name": True, "parent": True},
                                    sort=[("name", -1)])
 
@@ -206,26 +208,27 @@ def process_queued_item(entry):
         entry (dict):
 
     Returns:
-
+        None
     """
 
     asset_name = entry["asset"]
     version_id = entry["document"]["_id"]
 
-    # Get the container
-    # Check if item is in a container
-    container_lookup = get_containers(asset_name)
-    if not container_lookup:
-        node_name = asset_name.split("|")[-1]
-        container_lookup = get_containers([node_name])
+    # Assume content is stored under nodes, fallback to containers
+    nodes = entry.get("nodes", [])
+    if not nodes:
+        # Get the container and check if item is in a container
+        container_lookup = get_containers(asset_name)
+        if not container_lookup:
+            container_lookup = get_containers([asset_name.split("|")[-1]])
 
-    containers = container_lookup.keys()
-    assert len(containers) == 1, ("Node is found in no or multiple containers,"
-                                  " this is a bug")
+        # Get the content of the container
+        containers = container_lookup.keys()
+        nodes = cmds.ls(cmds.sets(containers, query=True), long=True)
 
-    # Get the content of the container
-    container = containers[0]
-    nodes = cmds.ls(cmds.sets(container, query=True), long=True)
+    if not nodes:
+        raise RuntimeError("Could not find any nodes in selection or from "
+                           "any containers")
 
     cblib.assign_look_by_version(nodes, version_id)
 
