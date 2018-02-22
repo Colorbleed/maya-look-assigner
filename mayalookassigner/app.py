@@ -2,6 +2,7 @@ import json
 import sys
 import logging
 
+from avalon import style
 from avalon.tools import lib as tools_lib
 from avalon.vendor.Qt import QtWidgets, QtCore, QtGui
 
@@ -453,6 +454,8 @@ def show(root=None, debug=False, parent=None):
 
     with tools_lib.application():
         window = App(parent)
+        window.setStyleSheet(style.load_stylesheet())
         window.show()
+        window.refresh()
 
         module.window = window
