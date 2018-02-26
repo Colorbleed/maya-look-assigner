@@ -17,7 +17,7 @@ def get_workfolder():
     return os.path.dirname(cmds.file(query=True, sceneName=True))
 
 
-def get_container_items_from_selection():
+def get_items_from_selection():
     """Get information from current selection"""
 
     # TODO: Investigate how we can make `long` argument work
@@ -35,10 +35,10 @@ def get_container_items_from_selection():
 
 
 def get_all_assets():
-    """Get all assets from the scene
+    """Get all assets from the scene, container based
 
     Returns:
-        list
+        list: list of dictionaries
     """
 
     host = api.registered_host()
@@ -145,58 +145,47 @@ def create_items_from_selection(content):
         return asset_view_items
 
     for _id, nodes in id_hashes.items():
-        asset = io.find_one({"_id": io.ObjectId(_id)},
-                            projection={"name": True})
+        document = io.find_one({"_id": io.ObjectId(_id)},
+                                projection={"name": True})
 
         # Skip if asset id is not found
-        if not asset:
-            log.warning("Id is not found in the database, skipping '%s'." % _id)
+        if not document:
+            log.warning("Id not found in the database, skipping '%s'." % _id)
             log.warning("Nodes: %s" % nodes)
             continue
 
-        looks = fetch_looks([_id])
-        asset_view_items.append({"asset": asset,
-                                 "objectName": asset["name"],
+        looks = fetch_looks(document)
+        asset_view_items.append({"document": document,
+                                 "asset_name": document["name"],
                                  "looks": looks,
                                  "_id": _id,
                                  "nodes": nodes})
     return asset_view_items
 
 
-def fetch_looks(asset_ids):
-    """Get all looks based on the asset id from the cbId attributes
-
-    Use the given asset ID from the attribute which matches an ID from the
-    database to use
+def fetch_looks(document):
+    """Get all looks based on the asset id
 
     Args:
-        asset_ids (list): list of unique asset IDs
+        document (dict): database object
 
     Returns:
         looks (list): looks per asset {asset_name : [look_data, look_data]}
     """
 
-    publish_looks = list()
-    for asset_id in asset_ids:
-        # Get asset name for sorting
-        object_id = io.ObjectId(asset_id)
+    publish_looks = []
 
-        # Verify if asset ID is correct
-        asset = io.find_one({"_id": object_id}, projection={"name": True})
-        if not asset:
-            log.error("Could not find asset with objectId `%s`" % asset_id)
-            return publish_looks
+    # Get all data
+    asset_name = document["name"]
+    for subset in cblib.list_looks(document["_id"]):
+        version = io.find_one({"type": "version",
+                               "parent": subset["_id"]},
+                               projection={"name": True, "parent": True},
+                               sort=[("name", -1)])
 
-        # Get all data
-        for subset in cblib.list_looks(object_id):
-            version = io.find_one({"type": "version",
-                                   "parent": subset["_id"]},
-                                   projection={"name": True, "parent": True},
-                                   sort=[("name", -1)])
-
-            publish_looks.append({"asset": asset["name"],
-                                  "subset": subset["name"],
-                                  "version": version})
+        publish_looks.append({"asset_name": asset_name,
+                              "subset": subset["name"],
+                              "version": version})
 
     return publish_looks
 
@@ -209,31 +198,29 @@ def process_queued_item(entry):
 
     Returns:
         None
+
     """
-
-    asset_name = entry["asset"]
-    version_id = entry["document"]["_id"]
-
     # Assume content is stored under nodes, fallback to containers
     nodes = entry.get("nodes", [])
-    if not nodes:
-        # Get the container and check if item is in a container
-        container_lookup = get_containers(asset_name)
-        if not container_lookup:
-            container_lookup = get_containers([asset_name.split("|")[-1]])
+    assert nodes, ("Could not find any nodes in selection or from "
+                   "any containers")
 
-        # Get the content of the container
-        containers = container_lookup.keys()
-        nodes = cmds.ls(cmds.sets(containers, query=True), long=True)
-
-    if not nodes:
-        raise RuntimeError("Could not find any nodes in selection or from "
-                           "any containers")
-
-    cblib.assign_look_by_version(nodes, version_id)
+    cblib.assign_look_by_version(nodes, entry["version"]["_id"])
 
 
 def get_asset_data(objectId):
+    """
+    Check if objectId is an asset
+
+    If the objectId is a representation if will look retrieve the parenthood
+    and pick the asset from it
+
+    Args:
+        objectId:
+
+    Returns:
+        asset (dict)
+    """
 
     document = io.find_one({"_id": io.ObjectId(objectId)})
     document_type = document["type"]
@@ -242,14 +229,22 @@ def get_asset_data(objectId):
     elif document_type == "asset":
         asset = document
     else:
-        print("Could not fetch enough data")
+        log.warning("Could not fetch enough data")
         return
 
     return asset
 
 
 def create_queue_out_data(queue_items):
-    """Create a json friendly data block"""
+    """Create a JSON friendly block to write out
+
+    Args:
+        queue_items (list): list of dict
+
+    Returns:
+        list: list of dict
+
+    """
 
     items = []
     for item in queue_items:
@@ -263,7 +258,14 @@ def create_queue_out_data(queue_items):
 
 
 def create_queue_in_data(queue_items):
-    """Create a database friendly data block for the tool"""
+    """Create a database friendly data block for the tool
+
+    Args:
+        queue_items (list): list of dict
+
+    Returns:
+        list: list of dict
+    """
     items = []
     for item in queue_items:
         new_item = deepcopy(item)
