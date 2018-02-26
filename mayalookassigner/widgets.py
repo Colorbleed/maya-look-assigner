@@ -28,6 +28,7 @@ class AssetOutliner(QtWidgets.QWidget):
         model = models.AssetModel()
         view = views.View()
         view.setModel(model)
+        view.customContextMenuRequested.connect(self.right_mouse_menu)
 
         from_selection_btn = QtWidgets.QPushButton("Get Looks From Selection")
         from_all_asset_btn = QtWidgets.QPushButton("Get Looks From All Assets")
@@ -102,6 +103,36 @@ class AssetOutliner(QtWidgets.QWidget):
         items = commands.get_items_from_selection()
         self.add_items(items)
 
+    def select_asset_from_items(self):
+        """Select nodes from listed asset"""
+
+        nodes = []
+        items = self.get_selected_items()
+        for item in items:
+            nodes.extend(item["nodes"])
+
+        commands.select(nodes)
+
+    def right_mouse_menu(self, pos):
+        """Build RMB menu for asset outliner"""
+
+        active = self.view.currentIndex()  # index under mouse
+        active = active.sibling(active.row(), 0)  # get first column
+        globalpos = self.view.viewport().mapToGlobal(pos)
+
+        menu = QtWidgets.QMenu(self.view)
+
+        # Direct assignment
+        apply_action = QtWidgets.QAction(menu, text="Select nodes")
+        apply_action.triggered.connect(self.select_asset_from_items)
+
+        if not active.isValid():
+            apply_action.setEnabled(False)
+
+        menu.addAction(apply_action)
+
+        menu.exec_(globalpos)
+
 
 class LookOutliner(QtWidgets.QWidget):
 
@@ -127,7 +158,6 @@ class LookOutliner(QtWidgets.QWidget):
         view.setModel(model)
         view.setMinimumHeight(180)
         view.setToolTip("Use right mouse button menu for direct actions")
-        view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.customContextMenuRequested.connect(self.right_mouse_menu)
 
         layout.addWidget(title)
@@ -187,7 +217,6 @@ class QueueWidget(QtWidgets.QWidget):
 
     on_process_selected = QtCore.Signal()
     on_process_all = QtCore.Signal()
-    on_remove_unused = QtCore.Signal()
 
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
@@ -201,8 +230,8 @@ class QueueWidget(QtWidgets.QWidget):
         title.setAlignment(QtCore.Qt.AlignCenter)
 
         # Turn off queue at start, show this widget
-        queue_off_message = QtWidgets.QLabel(
-            "Queue is empty, add items to the queue to activate it")
+        queue_off_message = QtWidgets.QLabel("Queue is empty, add items to the"
+                                             " queue to activate it")
         queue_off_message.setAlignment(QtCore.Qt.AlignCenter)
         queue_off_message.setStyleSheet("font-size: 12px;")
 
@@ -213,18 +242,16 @@ class QueueWidget(QtWidgets.QWidget):
 
         process_selected_queued = QtWidgets.QPushButton("Process Selected")
         process_queued = QtWidgets.QPushButton("Process All")
-        remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
+        save_queue_btn = QtWidgets.QPushButton("fSave Queue to File")
 
         model = models.QueueModel()
         view = views.View()
-        view.setMinimumHeight(150)
         view.setModel(model)
-        view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.customContextMenuRequested.connect(self.right_mouse_menu)
 
         method_buttons_layout.addWidget(process_selected_queued)
         method_buttons_layout.addWidget(process_queued)
-        method_buttons_layout.addWidget(remove_unused_btn)
+        method_buttons_layout.addWidget(save_queue_btn)
 
         queue_layout.addWidget(view)
         queue_layout.addLayout(method_buttons_layout)
@@ -239,7 +266,7 @@ class QueueWidget(QtWidgets.QWidget):
 
         self._process_selected_queued = process_selected_queued
         self._process_queued = process_queued
-        self._remove_unused_btn = remove_unused_btn
+        self._save_queue_btn = save_queue_btn
 
         self.view = view
         self.model = model
@@ -252,10 +279,11 @@ class QueueWidget(QtWidgets.QWidget):
         self.setup_connections()
 
     def setup_connections(self):
+        """Build connection between trigger and function"""
 
         self._process_selected_queued.clicked.connect(self.on_process_selected)
         self._process_queued.clicked.connect(self.on_process_all)
-        self._remove_unused_btn.clicked.connect(self.on_remove_unused)
+        self._save_queue_btn.clicked.connect(self.save_queue)
 
     def clear(self):
         self.model.clear()
@@ -278,20 +306,22 @@ class QueueWidget(QtWidgets.QWidget):
         # Restructure looks
         matches = self._reconstruct_looks(looks)
         for asset in assets:
+            view_name = asset["asset"]
             asset_name = asset["asset_name"]
             match = matches[asset_name]
 
             # Create new item by copying the match
-            items.append({"version_name": match["name"],
-                          "subset": match["subset"],
+            items.append({"asset": view_name,
                           "asset_name": asset_name,
-                          "nodes": asset["nodes"],
-                          "version": match})
+                          "version_name": match["name"],
+                          "subset": match["subset"],
+                          "version": match,
+                          "nodes": asset["nodes"]})
 
         return items
 
     def add_items(self, items):
-        """Add items to current queueu"""
+        """Add items to current queue"""
 
         validated = [i for i in items if self.validate(i)]
         if not validated:
