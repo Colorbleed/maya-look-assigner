@@ -185,6 +185,10 @@ class LookOutliner(QtWidgets.QWidget):
 
 class QueueWidget(QtWidgets.QWidget):
 
+    on_process_selected = QtCore.Signal()
+    on_process_all = QtCore.Signal()
+    on_remove_unused = QtCore.Signal()
+
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
@@ -198,9 +202,18 @@ class QueueWidget(QtWidgets.QWidget):
 
         # Turn off queue at start, show this widget
         queue_off_message = QtWidgets.QLabel(
-            "Queue is empty, add items to the queue to active it")
+            "Queue is empty, add items to the queue to activate it")
         queue_off_message.setAlignment(QtCore.Qt.AlignCenter)
         queue_off_message.setStyleSheet("font-size: 12px;")
+
+        # Method buttons, visible when queue is populated
+        queue_widget = QtWidgets.QWidget()
+        queue_layout = QtWidgets.QVBoxLayout()
+        method_buttons_layout = QtWidgets.QHBoxLayout()
+
+        process_selected_queued = QtWidgets.QPushButton("Process Selected")
+        process_queued = QtWidgets.QPushButton("Process All")
+        remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
 
         model = models.QueueModel()
         view = views.View()
@@ -209,11 +222,24 @@ class QueueWidget(QtWidgets.QWidget):
         view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.customContextMenuRequested.connect(self.right_mouse_menu)
 
+        method_buttons_layout.addWidget(process_selected_queued)
+        method_buttons_layout.addWidget(process_queued)
+        method_buttons_layout.addWidget(remove_unused_btn)
+
+        queue_layout.addWidget(view)
+        queue_layout.addLayout(method_buttons_layout)
+
+        queue_widget.setLayout(queue_layout)
+
         stack.addWidget(queue_off_message)
-        stack.addWidget(view)
+        stack.addWidget(queue_widget)
 
         layout.addWidget(title)
         layout.addWidget(stack)
+
+        self._process_selected_queued = process_selected_queued
+        self._process_queued = process_queued
+        self._remove_unused_btn = remove_unused_btn
 
         self.view = view
         self.model = model
@@ -223,8 +249,17 @@ class QueueWidget(QtWidgets.QWidget):
 
         self.log = logging.getLogger(__name__)
 
+        self.setup_connections()
+
+    def setup_connections(self):
+
+        self._process_selected_queued.clicked.connect(self.on_process_selected)
+        self._process_queued.clicked.connect(self.on_process_all)
+        self._remove_unused_btn.clicked.connect(self.on_remove_unused)
+
     def clear(self):
         self.model.clear()
+        self.stack.setCurrentIndex(0)
 
     def create_items(self, looks, assets):
         """Create a queue item based on the selection
@@ -248,6 +283,7 @@ class QueueWidget(QtWidgets.QWidget):
 
             # Create new item by copying the match
             items.append({"version_name": match["name"],
+                          "subset": match["subset"],
                           "asset_name": asset_name,
                           "nodes": asset["nodes"],
                           "version": match})

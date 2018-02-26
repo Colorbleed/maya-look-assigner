@@ -49,23 +49,12 @@ class App(QtWidgets.QWidget):
         look_manager_layout.addWidget(queue_widget)
         look_main_widget.setLayout(look_manager_layout)
 
-        # Method buttons
-        method_buttons_layout = QtWidgets.QHBoxLayout()
-        process_selected_queued = QtWidgets.QPushButton(
-            "Process Selected Queue")
-        process_queued = QtWidgets.QPushButton("Process Queued Looks")
-        remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
-        method_buttons_layout.addWidget(process_selected_queued)
-        method_buttons_layout.addWidget(process_queued)
-        method_buttons_layout.addWidget(remove_unused_btn)
-
         load_save_buttons_layout = QtWidgets.QHBoxLayout()
         load_queue_btn = QtWidgets.QPushButton("Load Queue from File")
         save_queue_btn = QtWidgets.QPushButton("Save Queue to File")
         load_save_buttons_layout.addWidget(load_queue_btn)
         load_save_buttons_layout.addWidget(save_queue_btn)
 
-        look_manager_layout.addLayout(method_buttons_layout)
         look_manager_layout.addLayout(load_save_buttons_layout)
 
         # Build up widgets
@@ -84,9 +73,6 @@ class App(QtWidgets.QWidget):
         self.queue = queue_widget
 
         # Open Buttons
-        self.process_selected_queued = process_selected_queued
-        self.process_queued = process_queued
-        self.remove_unused_btn = remove_unused_btn
         self.save_queue = save_queue_btn
         self.load_queue = load_queue_btn
 
@@ -97,17 +83,9 @@ class App(QtWidgets.QWidget):
 
         self.asset_outliner.selection_changed.connect(
             self.on_asset_selection_changed)
-        # self.asset_outliner.from_all_assets.connect()
-        # self.asset_outliner.from_selection.connect()
 
         self.look_outliner.menu_queue_action.connect(self.on_queue_selected)
         self.look_outliner.menu_apply_action.connect(self.on_process_selected)
-
-        self.process_selected_queued.clicked.connect(
-            self.on_process_selected_queued)
-        self.process_queued.clicked.connect(self.on_process_queued)
-
-        self.remove_unused_btn.clicked.connect(commands.remove_unused_looks)
 
         self.save_queue.clicked.connect(self.queue.save_queue)
         self.load_queue.clicked.connect(self.queue.load_queue)
