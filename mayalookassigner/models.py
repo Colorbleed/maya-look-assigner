@@ -44,7 +44,7 @@ class AssetModel(model.TreeModel):
 
 class LookModel(model.TreeModel):
 
-    COLUMNS = ["subset", "match", "version_name"]
+    COLUMNS = ["subset", "match"]
 
     def add_items(self, items):
         """
