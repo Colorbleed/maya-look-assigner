@@ -13,14 +13,35 @@ from avalon import io, api
 log = logging.getLogger(__name__)
 
 
+def get_workfile():
+    path = cmds.file(query=True, sceneName=True)
+    return os.path.basename(path)
+
+
 def get_workfolder():
     return os.path.dirname(cmds.file(query=True, sceneName=True))
 
 
+def select(nodes):
+    cmds.select(nodes)
+
+
+def get_namespace_from_node(node):
+    """Get the namespace from the given node
+
+    Args:
+        node (str): name of the node
+
+    Returns:
+        namespace (str)
+
+    """
+    _, ns = cmds.ls(node, showNamespace=True)
+    return ns
+
+
 def get_items_from_selection():
     """Get information from current selection"""
-
-    # TODO: Investigate how we can make `long` argument work
 
     items = []
     selection = cmds.ls(selection=True)
@@ -155,8 +176,11 @@ def create_items_from_selection(content):
             continue
 
         looks = fetch_looks(document)
-        asset_view_items.append({"document": document,
+        namespace = get_namespace_from_node(nodes[0])
+        asset = "%s : %s" % (namespace, document["name"])
+        asset_view_items.append({"asset": asset,
                                  "asset_name": document["name"],
+                                 "document": document,
                                  "looks": looks,
                                  "_id": _id,
                                  "nodes": nodes})
