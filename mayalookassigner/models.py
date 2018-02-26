@@ -63,15 +63,13 @@ class LookModel(model.TreeModel):
             subsets[item["subset"]].append(item)
 
         for subset, assets in sorted(subsets.iteritems()):
-            version = assets[0]["version"]
 
             item_node = model.Node()
 
-            item_node["asset_name"] = assets[0]["asset_name"]
             item_node["subset"] = subset
-            item_node["version"] = version
-            item_node["version_name"] = version["name"]
             item_node["match"] = len(assets)
+            item_node["matches"] = {asset["asset_name"]: asset["version"]
+                                    for asset in assets}
 
             self.add_child(item_node)
 
