@@ -19,8 +19,9 @@ class App(QtWidgets.QWidget):
 
         self.log = logging.getLogger(__name__)
 
+        filename = commands.get_workfile()
         self.setObjectName("lookManager")
-        self.setWindowTitle("Look Manager 1.2")
+        self.setWindowTitle("Look Manager 1.2 - [{}]".format(filename))
         self.resize(900, 500)
 
         self.setup_ui()
@@ -31,36 +32,41 @@ class App(QtWidgets.QWidget):
         """Build the UI"""
 
         main_layout = QtWidgets.QHBoxLayout()
-        splitter = QtWidgets.QSplitter()
+        main_splitter = QtWidgets.QSplitter()
 
         # Assets overview
         asset_outliner = widgets.AssetOutliner()
 
         # Look manager part
-        look_main_widget = QtWidgets.QWidget()
+        look_manager_widget = QtWidgets.QWidget()
         look_manager_layout = QtWidgets.QVBoxLayout()
-        look_manager_layout.setSpacing(10)
+
+        look_view_splitter = QtWidgets.QSplitter()
+        look_view_splitter.setOrientation(QtCore.Qt.Vertical)
 
         look_outliner = widgets.LookOutliner()  # Database look overview
         queue_widget = widgets.QueueWidget()  # Queue list overview
         queue_widget.stack.setCurrentIndex(0)
 
-        look_manager_layout.addWidget(look_outliner)
-        look_manager_layout.addWidget(queue_widget)
-        look_main_widget.setLayout(look_manager_layout)
+        look_view_splitter.addWidget(look_outliner)
+        look_view_splitter.addWidget(queue_widget)
 
-        load_save_buttons_layout = QtWidgets.QHBoxLayout()
+        default_buttons = QtWidgets.QHBoxLayout()
         load_queue_btn = QtWidgets.QPushButton("Load Queue from File")
-        save_queue_btn = QtWidgets.QPushButton("Save Queue to File")
-        load_save_buttons_layout.addWidget(load_queue_btn)
-        load_save_buttons_layout.addWidget(save_queue_btn)
+        remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
+        default_buttons.addWidget(load_queue_btn)
+        default_buttons.addWidget(remove_unused_btn)
 
-        look_manager_layout.addLayout(load_save_buttons_layout)
+        look_manager_layout.addWidget(look_view_splitter)
+        look_manager_layout.addLayout(default_buttons)
+        look_manager_widget.setLayout(look_manager_layout)
+
+        look_view_splitter.setSizes([500, 0])
 
         # Build up widgets
-        splitter.addWidget(asset_outliner)
-        splitter.addWidget(look_main_widget)
-        main_layout.addWidget(splitter)
+        main_splitter.addWidget(asset_outliner)
+        main_splitter.addWidget(look_manager_widget)
+        main_layout.addWidget(main_splitter)
 
         # Set column width
         asset_outliner.view.setColumnWidth(0, 200)
@@ -73,7 +79,7 @@ class App(QtWidgets.QWidget):
         self.queue = queue_widget
 
         # Open Buttons
-        self.save_queue = save_queue_btn
+        self.remove_unused = remove_unused_btn
         self.load_queue = load_queue_btn
 
         self.setLayout(main_layout)
@@ -87,7 +93,7 @@ class App(QtWidgets.QWidget):
         self.look_outliner.menu_queue_action.connect(self.on_queue_selected)
         self.look_outliner.menu_apply_action.connect(self.on_process_selected)
 
-        self.save_queue.clicked.connect(self.queue.save_queue)
+        self.remove_unused.clicked.connect(commands.remove_unused_looks)
         self.load_queue.clicked.connect(self.queue.load_queue)
 
     def refresh(self):
