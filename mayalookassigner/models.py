@@ -1,11 +1,11 @@
 from collections import defaultdict
-from avalon.vendor.Qt import QtCore
 from avalon.tools.cbsceneinventory import model
 
 
 class AssetModel(model.TreeModel):
 
-    COLUMNS = ["asset_name"]
+    COLUMNS = ["asset"]
+    NAMESPACE = False
 
     def add_items(self, items):
         """
@@ -34,10 +34,6 @@ class AssetModel(model.TreeModel):
         if role == model.TreeModel.NodeRole:
             node = index.internalPointer()
             return node
-
-        if role == QtCore.Qt.DisplayRole:
-            node = index.internalPointer()
-            return node.get(self.COLUMNS[0], None)
 
         return super(AssetModel, self).data(index, role)
 
@@ -77,7 +73,8 @@ class LookModel(model.TreeModel):
 
 
 class QueueModel(AssetModel):
-    COLUMNS = ["asset_name", "subset", "version_name"]
+
+    COLUMNS = ["asset", "subset", "version_name"]
 
     def data(self, index, role):
 
