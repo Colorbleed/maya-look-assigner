@@ -1,11 +1,11 @@
 from collections import defaultdict
 from avalon.vendor.Qt import QtCore
-from avalon.tools.cbsceneinventory import model, proxy
+from avalon.tools.cbsceneinventory import model
 
 
-class ContainerModel(model.TreeModel):
+class AssetModel(model.TreeModel):
 
-    COLUMNS = ["objectName"]
+    COLUMNS = ["asset_name"]
 
     def add_items(self, items):
         """
@@ -39,12 +39,12 @@ class ContainerModel(model.TreeModel):
             node = index.internalPointer()
             return node.get(self.COLUMNS[0], None)
 
-        return super(ContainerModel, self).data(index, role)
+        return super(AssetModel, self).data(index, role)
 
 
-class FlatModel(model.TreeModel):
+class LookModel(model.TreeModel):
 
-    COLUMNS = ["subset", "match"]
+    COLUMNS = ["subset", "match", "version_name"]
 
     def add_items(self, items):
         """
@@ -63,23 +63,23 @@ class FlatModel(model.TreeModel):
             subsets[item["subset"]].append(item)
 
         for subset, assets in sorted(subsets.iteritems()):
-            item_node = model.Node()
-            count = len(assets)
-            item_node["version"] = {asset["asset"]: asset["version"]
-                                    for asset in assets}
+            version = assets[0]["version"]
 
+            item_node = model.Node()
+
+            item_node["asset_name"] = assets[0]["asset_name"]
             item_node["subset"] = subset
-            item_node["match"] = count
-            item_node["assets"] = [asset["asset"] for asset in assets]
+            item_node["version"] = version
+            item_node["version_name"] = version["name"]
+            item_node["match"] = len(assets)
 
             self.add_child(item_node)
 
         self.endResetModel()
 
 
-class LookQueueModel(ContainerModel):
-    COLUMNS = ["asset", "subset", "version", "new"]
-    # TODO: implement version widget?
+class QueueModel(AssetModel):
+    COLUMNS = ["asset_name", "subset", "version_name"]
 
     def data(self, index, role):
 
@@ -90,4 +90,4 @@ class LookQueueModel(ContainerModel):
             node = index.internalPointer()
             return node
 
-        return super(ContainerModel, self).data(index, role)
+        return super(AssetModel, self).data(index, role)
