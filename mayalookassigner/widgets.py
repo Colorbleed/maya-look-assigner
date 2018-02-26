@@ -80,9 +80,9 @@ class AssetOutliner(QtWidgets.QWidget):
             list: list of dictionaries
         """
 
-        selection = self.view.selectionModel()
-        datas = [i.data(NODEROLE) for i in selection.selectedRows(0)]
-        items = [d for d in datas if d is not None]  # filter Nones
+        selection_model = self.view.selectionModel()
+        items = [row.data(NODEROLE) for row in
+                 selection_model.selectedRows(0)]
 
         return items
 
@@ -239,22 +239,18 @@ class QueueWidget(QtWidgets.QWidget):
         """
 
         items = []
+
+        # Restructure looks
+        matches = self._reconstruct_looks(looks)
         for asset in assets:
             asset_name = asset["asset_name"]
-            nodes = asset["nodes"]
-            for look in looks:
-                # Check if look matches asset
-                if look["asset_name"] != asset_name:
-                    continue
+            match = matches[asset_name]
 
-                version = look["version"]
-                if version is None:
-                    continue
-
-                look.update({"version_name": version["name"],
-                             "nodes": nodes})
-
-                items.append(look)
+            # Create new item by copying the match
+            items.append({"version_name": match["name"],
+                          "asset_name": asset_name,
+                          "nodes": asset["nodes"],
+                          "version": match})
 
         return items
 
@@ -436,3 +432,25 @@ class QueueWidget(QtWidgets.QWidget):
         menu.addAction(clear_action)
 
         menu.exec_(globalpos)
+
+    def _reconstruct_looks(self, looks):
+        """
+        Reconstruct data
+        Args:
+            looks (list): list of dicts
+
+        Returns:
+            dict
+        """
+
+        look_lookup = {}
+
+        for look in looks:
+            match_dict = look["matches"]
+            assets = match_dict.keys()
+            for asset in assets:
+                match = match_dict[asset]
+                match["subset"] = look["subset"]
+                look_lookup[asset] = match
+
+        return look_lookup
