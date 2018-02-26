@@ -55,10 +55,12 @@ class View(QtWidgets.QTreeView):
     def show_version_dialog(self, items):
         """Create a dialog with the available versions for the selected file
 
-        :param items: list of items to run the "set_version" for
-        :type items: list
+        Args:
+            items (list): items to run the "set_version" for
 
-        :returns: None
+        Returns:
+            None
+
         """
 
         active = items[-1]
