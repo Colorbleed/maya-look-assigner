@@ -217,6 +217,8 @@ class QueueWidget(QtWidgets.QWidget):
 
     on_process_selected = QtCore.Signal()
     on_process_all = QtCore.Signal()
+    on_emptied = QtCore.Signal()
+    on_populated = QtCore.Signal()
 
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
@@ -288,6 +290,7 @@ class QueueWidget(QtWidgets.QWidget):
     def clear(self):
         self.model.clear()
         self.stack.setCurrentIndex(0)
+        self.on_emptied.emit()
 
     def create_items(self, looks, assets):
         """Create a queue item based on the selection

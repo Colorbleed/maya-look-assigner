@@ -41,15 +41,15 @@ class App(QtWidgets.QWidget):
         look_manager_widget = QtWidgets.QWidget()
         look_manager_layout = QtWidgets.QVBoxLayout()
 
-        look_view_splitter = QtWidgets.QSplitter()
-        look_view_splitter.setOrientation(QtCore.Qt.Vertical)
+        look_splitter = QtWidgets.QSplitter()
+        look_splitter.setOrientation(QtCore.Qt.Vertical)
 
         look_outliner = widgets.LookOutliner()  # Database look overview
         queue_widget = widgets.QueueWidget()  # Queue list overview
         queue_widget.stack.setCurrentIndex(0)
 
-        look_view_splitter.addWidget(look_outliner)
-        look_view_splitter.addWidget(queue_widget)
+        look_splitter.addWidget(look_outliner)
+        look_splitter.addWidget(queue_widget)
 
         default_buttons = QtWidgets.QHBoxLayout()
         load_queue_btn = QtWidgets.QPushButton("Load Queue from File")
@@ -57,11 +57,11 @@ class App(QtWidgets.QWidget):
         default_buttons.addWidget(load_queue_btn)
         default_buttons.addWidget(remove_unused_btn)
 
-        look_manager_layout.addWidget(look_view_splitter)
+        look_manager_layout.addWidget(look_splitter)
         look_manager_layout.addLayout(default_buttons)
         look_manager_widget.setLayout(look_manager_layout)
 
-        look_view_splitter.setSizes([500, 0])
+        look_splitter.setSizes([500, 0])
 
         # Build up widgets
         main_splitter.addWidget(asset_outliner)
@@ -77,6 +77,7 @@ class App(QtWidgets.QWidget):
         self.asset_outliner = asset_outliner
         self.look_outliner = look_outliner
         self.queue = queue_widget
+        self.look_splitter = look_splitter
 
         # Open Buttons
         self.remove_unused = remove_unused_btn
@@ -92,6 +93,7 @@ class App(QtWidgets.QWidget):
 
         self.look_outliner.menu_queue_action.connect(self.on_queue_selected)
         self.look_outliner.menu_apply_action.connect(self.on_process_selected)
+        self.queue.on_emptied.connect(self._on_queue_emptied)
 
         self.remove_unused.clicked.connect(commands.remove_unused_looks)
         self.load_queue.clicked.connect(self.queue.load_queue)
@@ -143,6 +145,9 @@ class App(QtWidgets.QWidget):
         items = self.queue.get_selected_items()
         for item in items:
             commands.process_queued_item(item)
+
+    def _on_queue_emptied(self):
+        self.look_splitter.setSizes([500, 0])
 
 
 def show(root=None, debug=False, parent=None):
