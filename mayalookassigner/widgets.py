@@ -390,18 +390,23 @@ class QueueWidget(QtWidgets.QWidget):
         return items
 
     def remove_selected(self):
-        """Remove selected item(s) from the queue"""
+        """Remove selected item from the queue"""
 
-        active = self.view.currentIndex()
-        active_row = active.row()
-
+        # Get current items
         items = self.get_items()
-        items.pop(active_row)
-        if not items:
-            return
+
+        # Get current selected row
+        selection_model = self.view.selectionModel()
+        remove = set(selection_model.selectedRows())
+
+        # Remove items based on row index
+        items = [item for i, item in enumerate(items) if i not in remove]
 
         self.clear()
-        self.add_items(items)
+
+        # Add items back if we have items left
+        if items:
+            self.add_items(items)
 
     def process_items(self):
         """Apply the look based on the queued looks"""
