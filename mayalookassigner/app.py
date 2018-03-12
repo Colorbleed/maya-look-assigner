@@ -71,7 +71,6 @@ class App(QtWidgets.QWidget):
         # Set column width
         asset_outliner.view.setColumnWidth(0, 200)
         look_outliner.view.setColumnWidth(0, 200)
-        queue_widget.view.setColumnWidth(0, 200)
 
         # Open widgets
         self.asset_outliner = asset_outliner
@@ -134,6 +133,7 @@ class App(QtWidgets.QWidget):
         items = self.queue.create_items(looks, assets)
 
         self.queue.add_items(items)
+        self.look_splitter.setSizes([250, 250])
 
     def on_process_queued(self):
         """Process all queued items"""
