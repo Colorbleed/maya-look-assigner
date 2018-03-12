@@ -244,7 +244,7 @@ class QueueWidget(QtWidgets.QWidget):
 
         process_selected_queued = QtWidgets.QPushButton("Process Selected")
         process_queued = QtWidgets.QPushButton("Process All")
-        save_queue_btn = QtWidgets.QPushButton("fSave Queue to File")
+        save_queue_btn = QtWidgets.QPushButton("Save Queue to File")
 
         model = models.QueueModel()
         view = views.View()
@@ -288,6 +288,8 @@ class QueueWidget(QtWidgets.QWidget):
         self._save_queue_btn.clicked.connect(self.save_queue)
 
     def clear(self):
+        """Clear the queued items"""
+
         self.model.clear()
         self.stack.setCurrentIndex(0)
         self.on_emptied.emit()
@@ -311,7 +313,10 @@ class QueueWidget(QtWidgets.QWidget):
         for asset in assets:
             view_name = asset["asset"]
             asset_name = asset["asset_name"]
-            match = matches[asset_name]
+            match = matches.get(asset_name, None)
+            if match is None:
+                self.log.warning("No looks for %s" % asset_name)
+                continue
 
             # Create new item by copying the match
             items.append({"asset": view_name,
@@ -443,9 +448,11 @@ class QueueWidget(QtWidgets.QWidget):
     def load_queue(self):
         """Open a file loader and import data from json"""
 
-        _dir = commands.get_workfolder()
         fdialog = QtWidgets.QFileDialog()
-        fpath, ext = fdialog.getOpenFileName(self, "Open File", _dir, "*.json")
+        fpath, ext = fdialog.getOpenFileName(self,
+                                             "Open File",
+                                             commands.get_workfolder(),
+                                             "*.json")
 
         with open(fpath, "r") as fp:
             queue_data = json.load(fp)
