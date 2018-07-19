@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def get_workfile():
-    path = cmds.file(query=True, sceneName=True)
+    path = cmds.file(query=True, sceneName=True) or "untitled"
     return os.path.basename(path)
 
 

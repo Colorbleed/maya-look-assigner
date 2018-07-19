@@ -2,11 +2,11 @@ import sys
 import logging
 
 from avalon import style
-from avalon.tools import lib as tools_lib
+from avalon.tools import lib
 from avalon.vendor.Qt import QtWidgets, QtCore
 
-import mayalookassigner.widgets as widgets
-import mayalookassigner.commands as commands
+from . import widgets
+from . import commands
 
 module = sys.modules[__name__]
 module.window = None
@@ -20,8 +20,12 @@ class App(QtWidgets.QWidget):
         self.log = logging.getLogger(__name__)
 
         filename = commands.get_workfile()
+
         self.setObjectName("lookManager")
-        self.setWindowTitle("Look Manager 1.2 - [{}]".format(filename))
+        self.setWindowTitle("Look Manager 1.2.1 - [{}]".format(filename))
+        self.setWindowFlags(QtCore.Qt.Window)
+        self.setParent(parent)
+
         self.resize(900, 500)
 
         self.setup_ui()
@@ -150,7 +154,7 @@ class App(QtWidgets.QWidget):
         self.look_splitter.setSizes([500, 0])
 
 
-def show(root=None, debug=False, parent=None):
+def show():
     """Display Loader GUI
 
     Arguments:
@@ -165,8 +169,13 @@ def show(root=None, debug=False, parent=None):
     except (RuntimeError, AttributeError):
         pass
 
-    with tools_lib.application():
-        window = App(parent)
+    # Get Maya main window
+    top_level_widgets = QtWidgets.QApplication.topLevelWidgets()
+    mainwindow = next(widget for widget in top_level_widgets
+                      if widget.objectName() == "MayaWindow")
+
+    with lib.application():
+        window = App(parent=mainwindow)
         window.setStyleSheet(style.load_stylesheet())
         window.show()
 
