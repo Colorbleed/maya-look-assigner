@@ -144,6 +144,7 @@ class LookOutliner(QtWidgets.QWidget):
 
         # look manager layout
         layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         # Looks from database
