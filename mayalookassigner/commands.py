@@ -167,11 +167,11 @@ def create_items_from_selection(content):
     return asset_view_items
 
 
-def fetch_looks(document):
-    """Get all looks based on the asset id
+def fetch_looks(asset):
+    """Get all looks for the asset document.
 
     Args:
-        document (dict): database object
+        asset (dict): database object of asset.
 
     Returns:
         looks (list): looks per asset {asset_name : [look_data, look_data]}
@@ -180,8 +180,8 @@ def fetch_looks(document):
     publish_looks = []
 
     # Get all data
-    asset_name = document["name"]
-    for subset in cblib.list_looks(document["_id"]):
+    asset_name = asset["name"]
+    for subset in cblib.list_looks(asset["_id"]):
         version = io.find_one({"type": "version",
                                "parent": subset["_id"]},
                               projection={"name": True, "parent": True},
