@@ -3,9 +3,9 @@ import logging
 
 from avalon.vendor.Qt import QtWidgets, QtCore
 
-import models
-import commands
-import views
+from . import models
+from . import commands
+from . import views
 
 
 NODEROLE = QtCore.Qt.UserRole + 1
