@@ -70,7 +70,7 @@ def get_items_from_selection():
     hierarchy = list_descendents(selection)
     nodes = list(set(selection + hierarchy))
 
-    view_items = create_items_from_selection(nodes)
+    view_items = create_items_from_nodes(nodes)
     items.extend(view_items)
 
     return items
@@ -92,8 +92,8 @@ def get_all_assets():
             continue
         # Gather all information
         container_name = container["objectName"]
-        content = cmds.sets(container_name, query=True)
-        view_items = create_items_from_selection(content)
+        members = cmds.sets(container_name, query=True)
+        view_items = create_items_from_nodes(members)
         if not view_items:
             continue
 
@@ -122,7 +122,7 @@ def create_asset_id_hash(nodes):
     return dict(node_id_hash)
 
 
-def create_items_from_selection(content):
+def create_items_from_nodes(id_nodes):
     """Create an item for the view based the container and content of it
 
     It fetches the look document based on the asset ID found in the content.
@@ -132,7 +132,7 @@ def create_items_from_selection(content):
     it will log a warning message.
 
     Args:
-        content (list): list of items which are in the container or selection
+        id_nodes (list): list of maya nodes
 
     Returns:
         list of dicts
@@ -141,29 +141,29 @@ def create_items_from_selection(content):
 
     asset_view_items = []
 
-    id_hashes = create_asset_id_hash(content)
+    id_hashes = create_asset_id_hash(id_nodes)
     if not id_hashes:
         return asset_view_items
 
-    for _id, nodes in id_hashes.items():
-        document = io.find_one({"_id": io.ObjectId(_id)},
-                               projection={"name": True})
+    for _id, id_nodes in id_hashes.items():
+        asset_document = io.find_one({"_id": io.ObjectId(_id)},
+                                     projection={"name": True})
 
         # Skip if asset id is not found
-        if not document:
+        if not asset_document:
             log.warning("Id not found in the database, skipping '%s'." % _id)
-            log.warning("Nodes: %s" % nodes)
+            log.warning("Nodes: %s" % id_nodes)
             continue
 
-        looks = fetch_looks(document)
-        namespace = get_namespace_from_node(nodes[0])
-        asset = "%s : %s" % (namespace, document["name"])
+        looks = fetch_looks(asset_document)
+        namespace = get_namespace_from_node(id_nodes[0])
+        asset = "%s : %s" % (namespace, asset_document["name"])
         asset_view_items.append({"asset": asset,
-                                 "asset_name": document["name"],
-                                 "document": document,
+                                 "asset_name": asset_document["name"],
+                                 "document": asset_document,
                                  "looks": looks,
                                  "_id": _id,
-                                 "nodes": nodes})
+                                 "nodes": id_nodes})
     return asset_view_items
 
 
