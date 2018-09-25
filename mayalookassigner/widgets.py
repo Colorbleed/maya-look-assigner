@@ -3,9 +3,9 @@ import logging
 
 from avalon.vendor.Qt import QtWidgets, QtCore
 
-import models
-import commands
-import views
+from . import models
+from . import commands
+from . import views
 
 
 NODEROLE = QtCore.Qt.UserRole + 1
@@ -144,6 +144,7 @@ class LookOutliner(QtWidgets.QWidget):
 
         # look manager layout
         layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         # Looks from database

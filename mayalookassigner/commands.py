@@ -40,16 +40,37 @@ def get_namespace_from_node(node):
     return ns
 
 
+def list_descendents(nodes):
+    """Include full descendant hierarchy of given nodes.
+
+    This is a workaround to cmds.listRelatives(allDescendents=True) because
+    this way correctly keeps children instance paths (see Maya documentation)
+
+    This fixes LKD-26: assignments not working as expected on instanced shapes.
+
+    Return:
+        list: List of children descendents of nodes
+
+    """
+    result = []
+    while True:
+        nodes = cmds.listRelatives(nodes,
+                                   fullPath=True)
+        if nodes:
+            result.extend(nodes)
+        else:
+            return result
+
+
 def get_items_from_selection():
     """Get information from current selection"""
 
     items = []
-    selection = cmds.ls(selection=True)
-    hierarchy = cmds.listRelatives(selection,
-                                   allDescendents=True,
-                                   fullPath=True) or selection
+    selection = cmds.ls(selection=True, long=True)
+    hierarchy = list_descendents(selection)
+    nodes = list(set(selection + hierarchy))
 
-    view_items = create_items_from_selection(hierarchy)
+    view_items = create_items_from_selection(nodes)
     items.extend(view_items)
 
     return items
@@ -79,47 +100,6 @@ def get_all_assets():
         items.extend(view_items)
 
     return items
-
-
-def get_containers(nodes):
-    """Get containers for the nodes
-
-    Args:
-        nodes (list): collect of strings, e.g: selected nodes
-
-    Return:
-        dict
-    """
-
-    host = api.registered_host()
-    results = {}
-    nodes = set(nodes)
-    for container in host.ls():
-        container_object = container['objectName']
-        members = set(cmds.sets(container_object, query=True) or [])
-        if nodes.intersection(members):
-            results[container_object] = list(members)
-
-    return results
-
-
-def get_asset_id_item(item):
-
-    if cmds.objectType(item) == "objectSet":
-        content = cmds.sets(item, query=True)
-        shapes = cmds.ls(content, long=True, type="shape")
-        assert len(shapes) != 0, "Container has no shapes, this is an error"
-        item = shapes[0]
-
-    # Take the first shape, assuming all shapes in the container are from
-    # the same asset
-    cb_id = cblib.get_id(item)
-    if not cb_id:
-        return
-
-    asset_id = cb_id.rsplit(":")[0]
-
-    return asset_id
 
 
 def create_asset_id_hash(nodes):
@@ -167,7 +147,7 @@ def create_items_from_selection(content):
 
     for _id, nodes in id_hashes.items():
         document = io.find_one({"_id": io.ObjectId(_id)},
-                                projection={"name": True})
+                               projection={"name": True})
 
         # Skip if asset id is not found
         if not document:
@@ -204,8 +184,8 @@ def fetch_looks(document):
     for subset in cblib.list_looks(document["_id"]):
         version = io.find_one({"type": "version",
                                "parent": subset["_id"]},
-                               projection={"name": True, "parent": True},
-                               sort=[("name", -1)])
+                              projection={"name": True, "parent": True},
+                              sort=[("name", -1)])
 
         publish_looks.append({"asset_name": asset_name,
                               "subset": subset["name"],
@@ -230,33 +210,6 @@ def process_queued_item(entry):
                    "any containers")
 
     cblib.assign_look_by_version(nodes, entry["version"]["_id"])
-
-
-def get_asset_data(objectId):
-    """
-    Check if objectId is an asset
-
-    If the objectId is a representation if will look retrieve the parenthood
-    and pick the asset from it
-
-    Args:
-        objectId:
-
-    Returns:
-        asset (dict)
-    """
-
-    document = io.find_one({"_id": io.ObjectId(objectId)})
-    document_type = document["type"]
-    if document_type == "representation":
-        version, subset, asset, _ = io.parenthood(document)
-    elif document_type == "asset":
-        asset = document
-    else:
-        log.warning("Could not fetch enough data")
-        return
-
-    return asset
 
 
 def create_queue_out_data(queue_items):

@@ -26,7 +26,7 @@ class App(QtWidgets.QWidget):
         self.setWindowFlags(QtCore.Qt.Window)
         self.setParent(parent)
 
-        self.resize(900, 500)
+        self.resize(1000, 500)
 
         self.setup_ui()
 
@@ -37,6 +37,7 @@ class App(QtWidgets.QWidget):
 
         main_layout = QtWidgets.QHBoxLayout()
         main_splitter = QtWidgets.QSplitter()
+        main_splitter.setStyleSheet("QSplitter{ border: 0px; }")
 
         # Assets overview
         asset_outliner = widgets.AssetOutliner()
