@@ -1,8 +1,6 @@
-import json
 import logging
 
 from avalon.vendor.Qt import QtWidgets, QtCore
-from avalon import io
 
 # TODO: expose this better in avalon core
 from avalon.tools.projectmanager.widget import (
@@ -143,13 +141,12 @@ class AssetOutliner(QtWidgets.QWidget):
 class LookOutliner(QtWidgets.QWidget):
 
     menu_apply_action = QtCore.Signal()
-    menu_queue_action = QtCore.Signal()
 
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
         # look manager layout
-        layout = QtWidgets.QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
@@ -177,10 +174,6 @@ class LookOutliner(QtWidgets.QWidget):
 
         self.view = view
         self.model = model
-
-        self.setLayout(layout)
-
-        self.log = logging.getLogger(__name__)
 
     def clear(self):
         self.model.clear()
@@ -213,320 +206,11 @@ class LookOutliner(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self.view)
 
         # Direct assignment
-        apply_action = QtWidgets.QAction(menu, text="Assign Directly")
+        apply_action = QtWidgets.QAction(menu, text="Assign looks..")
         apply_action.triggered.connect(self.menu_apply_action)
 
-        queue_action = QtWidgets.QAction(menu, text="Queue Assignment")
-        queue_action.triggered.connect(self.menu_queue_action)
-
         menu.addAction(apply_action)
-        menu.addAction(queue_action)
 
         menu.exec_(globalpos)
 
 
-class QueueWidget(QtWidgets.QWidget):
-
-    on_process_selected = QtCore.Signal()
-    on_process_all = QtCore.Signal()
-    on_emptied = QtCore.Signal()
-    on_populated = QtCore.Signal()
-
-    def __init__(self, parent=None):
-        QtWidgets.QWidget.__init__(self, parent)
-
-        layout = QtWidgets.QVBoxLayout()
-        stack = QtWidgets.QStackedWidget()
-
-        title = QtWidgets.QLabel("Queue")
-        title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet("font-weight: bold; font-size: 12px")
-        title.setAlignment(QtCore.Qt.AlignCenter)
-
-        # Turn off queue at start, show this widget
-        queue_off_message = QtWidgets.QLabel("Queue is empty, add items to the"
-                                             " queue to activate it")
-        queue_off_message.setAlignment(QtCore.Qt.AlignCenter)
-        queue_off_message.setStyleSheet("font-size: 12px;")
-
-        # Method buttons, visible when queue is populated
-        queue_widget = QtWidgets.QWidget()
-        queue_layout = QtWidgets.QVBoxLayout()
-        method_buttons_layout = QtWidgets.QHBoxLayout()
-
-        process_selected_queued = QtWidgets.QPushButton("Process Selected")
-        process_queued = QtWidgets.QPushButton("Process All")
-        save_queue_btn = QtWidgets.QPushButton("Save Queue to File")
-
-        model = models.QueueModel()
-        view = views.View()
-        view.setModel(model)
-        view.customContextMenuRequested.connect(self.right_mouse_menu)
-
-        method_buttons_layout.addWidget(process_selected_queued)
-        method_buttons_layout.addWidget(process_queued)
-        method_buttons_layout.addWidget(save_queue_btn)
-
-        queue_layout.addWidget(view)
-        queue_layout.addLayout(method_buttons_layout)
-
-        queue_widget.setLayout(queue_layout)
-
-        stack.addWidget(queue_off_message)
-        stack.addWidget(queue_widget)
-
-        layout.addWidget(title)
-        layout.addWidget(stack)
-
-        self._process_selected_queued = process_selected_queued
-        self._process_queued = process_queued
-        self._save_queue_btn = save_queue_btn
-
-        self.view = view
-        self.model = model
-        self.stack = stack
-
-        self.setLayout(layout)
-
-        self.log = logging.getLogger(__name__)
-
-        self.setup_connections()
-
-    def setup_connections(self):
-        """Build connection between trigger and function"""
-
-        self._process_selected_queued.clicked.connect(self.on_process_selected)
-        self._process_queued.clicked.connect(self.on_process_all)
-        self._save_queue_btn.clicked.connect(self.save_queue)
-
-    def clear(self):
-        """Clear the queued items"""
-
-        self.model.clear()
-        self.stack.setCurrentIndex(0)
-        self.on_emptied.emit()
-
-    def create_items(self, looks, assets):
-        """Create a queue item based on the selection
-
-        Args:
-            looks (list): list of dicts with document information
-            assets (list): list of dicts with document information
-
-        Returns:
-            list: collection of look and asset data in dictionaries
-
-        """
-
-        # Collect the looks we want to apply (by name)
-        subsets = {look["subset"] for look in looks}
-
-        # Generate a queue item for every asset/look combination
-        items = []
-        for asset in assets:
-
-            for look_subset in asset["looks"]:
-                if look_subset["name"] in subsets:
-
-                    asset_name = asset["asset"]["name"]
-
-                    # Get the latest version of this asset's look subset
-                    version = io.find_one({"type": "version",
-                                           "parent": look_subset["_id"]},
-                                          sort=[("name", -1)])
-
-                    # Create new item by copying the match
-                    # TODO: should we collect nodes from selection?
-                    items.append({"asset": asset_name,
-                                  "asset_name": asset_name,
-                                  "subset": look_subset,
-                                  "nodes": asset["nodes"],
-                                  "version": version})
-
-        return items
-
-    def add_items(self, items):
-        """Add items to current queue"""
-
-        validated = [i for i in items if self.validate(i)]
-        if not validated:
-            return
-
-        if self.stack.currentIndex() != 1:
-            self.stack.setCurrentIndex(1)
-
-        self.model.add_items(validated)
-
-    def validate(self, item):
-        """If an entry already exists return False
-
-        Args:
-            item (dict): collection if look assignment data
-
-        Returns:
-            bool
-
-        """
-
-        parent = QtCore.QModelIndex()
-        for row in range(self.model.rowCount(parent)):
-            idx = self.model.index(row, 0, parent)
-            data = idx.data(NODEROLE)
-            if item == data:
-                self.log.info("Already in queue")
-                return False
-
-        return True
-
-    def get_items(self):
-        """Get all items from the current queue
-
-        Returns:
-            list
-        """
-
-        items = []
-        for row in range(self.model.rowCount(MODELINDEX)):
-            idx = self.model.index(row, 0, MODELINDEX)
-            index_data = idx.data(NODEROLE)
-            items.append(index_data)
-
-        return items
-
-    def get_selected_items(self):
-        """Return selected items
-
-        Returns:
-            list
-        """
-
-        selection_model = self.view.selectionModel()
-        items = [row.data(NODEROLE) for row in
-                 selection_model.selectedRows(0)]
-
-        return items
-
-    def remove_selected(self):
-        """Remove selected item from the queue"""
-
-        # Get current items
-        items = self.get_items()
-
-        # Get current selected row
-        selection_model = self.view.selectionModel()
-        remove = set(selection_model.selectedRows())
-
-        # Remove items based on row index
-        items = [item for i, item in enumerate(items) if i not in remove]
-
-        self.clear()
-
-        # Add items back if we have items left
-        if items:
-            self.add_items(items)
-
-    def process_items(self):
-        """Apply the look based on the queued looks"""
-
-        # Get queued items
-        items = self.get_items()
-        if not items:
-            self.log.error("No looks found")
-            return
-
-        for item in items:
-            commands.process_queued_item(item)
-
-    def process_selected_items(self):
-        """Apply the look based on the selected queued looks"""
-
-        items = self.get_selected_items()
-        if not items:
-            self.log.error("No looks found")
-            return
-
-        for item in items:
-            commands.process_queued_item(item)
-
-    def save_queue(self):
-        """Store the created queue in a json file"""
-
-        _dir = commands.get_workfolder()
-        fdialog = QtWidgets.QFileDialog()
-        fpath, ext = fdialog.getSaveFileName(self, "Save File", _dir, "*.json")
-        if not fpath:
-            return
-
-        assert ext == "*.json", "Wrong file type"
-
-        queued_items = self.get_items()
-        if not queued_items:
-            self.log.error("No queued items to store")
-            return
-
-        queue_data = commands.create_queue_out_data(queued_items)
-        commands.save_to_json(fpath, {"queue": queue_data})
-
-    def load_queue(self):
-        """Open a file loader and import data from json"""
-
-        fdialog = QtWidgets.QFileDialog()
-        fpath, ext = fdialog.getOpenFileName(self,
-                                             "Open File",
-                                             commands.get_workfolder(),
-                                             "*.json")
-
-        with open(fpath, "r") as fp:
-            queue_data = json.load(fp)
-
-        if "queue" not in queue_data:
-            raise RuntimeError("Invalid queue data")
-
-        items = commands.create_queue_in_data(queue_data["queue"])
-        valid_items = [i for i in items if self.validate(i)]
-
-        self.log.info("Found %d new item(s)" % len(valid_items))
-
-        if self.stack.currentIndex() != 1:
-            self.stack.setCurrentIndex(1)
-
-        self.add_items(valid_items)
-
-    def right_mouse_menu(self, pos):
-        """Build and display RMB menu at current pointer position"""
-
-        active = self.view.currentIndex()  # index under mouse
-        active = active.sibling(active.row(), 0)  # get first column
-        globalpos = self.view.viewport().mapToGlobal(pos)
-
-        menu = QtWidgets.QMenu(self.view)
-
-        if not active.isValid():
-            return
-
-        # region Create actions
-        apply_action = QtWidgets.QAction(menu, text="Process All")
-        apply_action.triggered.connect(self.process_items)
-
-        apply_action = QtWidgets.QAction(menu, text="Process Selected")
-        apply_action.triggered.connect(self.process_selected_items)
-
-        rem_action = QtWidgets.QAction(menu, text="Remove Selected")
-        rem_action.triggered.connect(self.remove_selected)
-
-        save_action = QtWidgets.QAction(menu, text="Save Queue")
-        save_action.triggered.connect(self.save_queue)
-
-        clear_action = QtWidgets.QAction(menu, text="Clear Queue")
-        clear_action.triggered.connect(self.clear)
-        # endregion
-
-        # Add actions
-        menu.addAction(apply_action)
-        menu.addAction(rem_action)
-        menu.addSeparator()
-
-        menu.addAction(save_action)
-        menu.addAction(clear_action)
-
-        menu.exec_(globalpos)

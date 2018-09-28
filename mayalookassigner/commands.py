@@ -1,6 +1,4 @@
 from collections import defaultdict
-from copy import deepcopy
-import json
 import logging
 import os
 
@@ -8,7 +6,6 @@ import maya.cmds as cmds
 
 import colorbleed.maya.lib as cblib
 from avalon import io, api
-reload(cblib)
 
 log = logging.getLogger(__name__)
 
@@ -166,73 +163,22 @@ def create_items_from_nodes(nodes):
     return asset_view_items
 
 
-def process_queued_item(entry):
-    """
-    Build the correct assignment for the selected asset
+def assign_item(item):
+    """Assign the look for the item entry.
+
     Args:
-        entry (dict):
+        item (dict):
 
     Returns:
         None
 
     """
     # Assume content is stored under nodes, fallback to containers
-    nodes = entry.get("nodes", [])
+    nodes = item.get("nodes", [])
     assert nodes, ("Could not find any nodes in selection or from "
                    "any containers")
 
-    cblib.assign_look_by_version(nodes, entry["version"]["_id"])
-
-
-def create_queue_out_data(queue_items):
-    """Create a JSON friendly block to write out
-
-    Args:
-        queue_items (list): list of dict
-
-    Returns:
-        list: list of dict
-
-    """
-
-    items = []
-    for item in queue_items:
-        # Ensure the io.ObjectId object is a string
-        new_item = deepcopy(item)
-        new_item["document"]["_id"] = str(item["document"]["_id"])
-        new_item["document"]["parent"] = str(item["document"]["parent"])
-        items.append(new_item)
-
-    return items
-
-
-def create_queue_in_data(queue_items):
-    """Create a database friendly data block for the tool
-
-    Args:
-        queue_items (list): list of dict
-
-    Returns:
-        list: list of dict
-    """
-    items = []
-    for item in queue_items:
-        new_item = deepcopy(item)
-        document = item["document"]
-        new_item["document"]["_id"] = io.ObjectId(document["_id"])
-        new_item["document"]["parent"] = io.ObjectId(document["parent"])
-        items.append(new_item)
-
-    return items
-
-
-def save_to_json(filepath, items):
-    """Store data in a json file"""
-
-    log.info("Writing queue file ...")
-    with open(filepath, "w") as fp:
-        json.dump(items, fp, ensure_ascii=False)
-    log.info("Successfully written file")
+    cblib.assign_look_by_version(nodes, item["version"]["_id"])
 
 
 def remove_unused_looks():
