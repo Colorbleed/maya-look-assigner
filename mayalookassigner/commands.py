@@ -8,7 +8,7 @@ import maya.cmds as cmds
 
 import colorbleed.maya.lib as cblib
 from avalon import io, api
-
+reload(cblib)
 
 log = logging.getLogger(__name__)
 
@@ -36,8 +36,8 @@ def get_namespace_from_node(node):
         namespace (str)
 
     """
-    _, ns = cmds.ls(node, showNamespace=True)
-    return ns
+    parts = node.rsplit("|", 1)[-1].rsplit(":", 1)
+    return parts[0] if len(parts) > 1 else u":"
 
 
 def list_descendents(nodes):
@@ -65,15 +65,11 @@ def list_descendents(nodes):
 def get_items_from_selection():
     """Get information from current selection"""
 
-    items = []
     selection = cmds.ls(selection=True, long=True)
     hierarchy = list_descendents(selection)
     nodes = list(set(selection + hierarchy))
 
-    view_items = create_items_from_nodes(nodes)
-    items.extend(view_items)
-
-    return items
+    return create_items_from_nodes(nodes)
 
 
 def get_all_assets():
@@ -85,21 +81,17 @@ def get_all_assets():
 
     host = api.registered_host()
 
-    items = []
+    nodes = []
     for container in host.ls():
         # We are not interested in looks but assets!
         if container["loader"] == "LookLoader":
             continue
+
         # Gather all information
         container_name = container["objectName"]
-        members = cmds.sets(container_name, query=True)
-        view_items = create_items_from_nodes(members)
-        if not view_items:
-            continue
+        nodes += cmds.sets(container_name, query=True, nodesOnly=True) or []
 
-        items.extend(view_items)
-
-    return items
+    return create_items_from_nodes(nodes)
 
 
 def create_asset_id_hash(nodes):
@@ -122,7 +114,7 @@ def create_asset_id_hash(nodes):
     return dict(node_id_hash)
 
 
-def create_items_from_nodes(id_nodes):
+def create_items_from_nodes(nodes):
     """Create an item for the view based the container and content of it
 
     It fetches the look document based on the asset ID found in the content.
@@ -132,7 +124,7 @@ def create_items_from_nodes(id_nodes):
     it will log a warning message.
 
     Args:
-        id_nodes (list): list of maya nodes
+        nodes (list): list of maya nodes
 
     Returns:
         list of dicts
@@ -141,57 +133,37 @@ def create_items_from_nodes(id_nodes):
 
     asset_view_items = []
 
-    id_hashes = create_asset_id_hash(id_nodes)
+    id_hashes = create_asset_id_hash(nodes)
     if not id_hashes:
         return asset_view_items
 
     for _id, id_nodes in id_hashes.items():
-        asset_document = io.find_one({"_id": io.ObjectId(_id)},
-                                     projection={"name": True})
+        asset = io.find_one({"_id": io.ObjectId(_id)},
+                            projection={"name": True})
 
         # Skip if asset id is not found
-        if not asset_document:
+        if not asset:
             log.warning("Id not found in the database, skipping '%s'." % _id)
             log.warning("Nodes: %s" % id_nodes)
             continue
 
-        looks = fetch_looks(asset_document)
-        namespace = get_namespace_from_node(id_nodes[0])
-        asset = "%s : %s" % (namespace, asset_document["name"])
-        asset_view_items.append({"asset": asset,
-                                 "asset_name": asset_document["name"],
-                                 "document": asset_document,
+        # Collect look subsets for this asset
+        looks = cblib.list_looks(asset["_id"])
+
+        # Collect nodes per namespaces
+        namespaces = defaultdict(list)
+        for node in id_nodes:
+            namespace = get_namespace_from_node(node)
+            namespaces[namespace].append(node)
+
+        asset_view_items.append({"label": asset["name"],
+                                 "asset": asset,
                                  "looks": looks,
-                                 "_id": _id,
-                                 "nodes": id_nodes})
+                                 "namespaces": namespaces,
+                                 "nodes": id_nodes
+                                 })
+
     return asset_view_items
-
-
-def fetch_looks(asset):
-    """Get all looks for the asset document.
-
-    Args:
-        asset (dict): database object of asset.
-
-    Returns:
-        looks (list): looks per asset {asset_name : [look_data, look_data]}
-    """
-
-    publish_looks = []
-
-    # Get all data
-    asset_name = asset["name"]
-    for subset in cblib.list_looks(asset["_id"]):
-        version = io.find_one({"type": "version",
-                               "parent": subset["_id"]},
-                              projection={"name": True, "parent": True},
-                              sort=[("name", -1)])
-
-        publish_looks.append({"asset_name": asset_name,
-                              "subset": subset["name"],
-                              "version": version})
-
-    return publish_looks
 
 
 def process_queued_item(entry):
@@ -286,6 +258,7 @@ def remove_unused_looks():
                 unused.append(container)
 
     for container in unused:
-        log.warning("Removing unused look container: %s",
-                    container['objectName'])
+        log.info("Removing unused look container: %s", container['objectName'])
         api.remove(container)
+
+    log.info("Finished removing unused looks. (see log for details)")

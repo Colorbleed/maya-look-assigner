@@ -2,6 +2,13 @@ import json
 import logging
 
 from avalon.vendor.Qt import QtWidgets, QtCore
+from avalon import io
+
+# TODO: expose this better in avalon core
+from avalon.tools.projectmanager.widget import (
+    preserve_selection,
+    preserve_expanded_rows
+)
 
 from . import models
 from . import commands
@@ -14,6 +21,7 @@ MODELINDEX = QtCore.QModelIndex()
 
 class AssetOutliner(QtWidgets.QWidget):
 
+    refreshed = QtCore.Signal()
     selection_changed = QtCore.Signal()
 
     def __init__(self, parent=None):
@@ -29,13 +37,16 @@ class AssetOutliner(QtWidgets.QWidget):
         view = views.View()
         view.setModel(model)
         view.customContextMenuRequested.connect(self.right_mouse_menu)
+        view.setSortingEnabled(False)
+        view.setHeaderHidden(True)
+        view.setIndentation(10)
 
-        from_selection_btn = QtWidgets.QPushButton("Get Looks From Selection")
-        from_all_asset_btn = QtWidgets.QPushButton("Get Looks From All Assets")
+        from_all_asset_btn = QtWidgets.QPushButton("Get All Assets")
+        from_selection_btn = QtWidgets.QPushButton("Get Assets From Selection")
 
         layout.addWidget(title)
-        layout.addWidget(from_selection_btn)
         layout.addWidget(from_all_asset_btn)
+        layout.addWidget(from_selection_btn)
         layout.addWidget(view)
 
         # Build connections
@@ -55,24 +66,15 @@ class AssetOutliner(QtWidgets.QWidget):
     def clear(self):
         self.model.clear()
 
+        # fix looks remaining visible when no items present after "refresh"
+        # todo: figure out why this workaround is needed.
+        self.selection_changed.emit()
+
     def add_items(self, items):
         """Add new items to the outliner"""
 
         self.model.add_items(items)
-
-    def get_look_from_selected_items(self):
-        """Get look data from selected items
-
-        Returns:
-            list: list of dictionaries
-        """
-
-        items = []
-        datas = self.get_selected_items()
-        for data in datas:
-            items.extend(data.get("looks", []))
-
-        return items
+        self.refreshed.emit()
 
     def get_selected_items(self):
         """Get current selected items from view
@@ -90,18 +92,22 @@ class AssetOutliner(QtWidgets.QWidget):
     def get_all_assets(self):
         """Add all items from the current scene"""
 
-        self.clear()
-        items = commands.get_all_assets()
-        self.add_items(items)
+        with preserve_expanded_rows(self.view):
+            with preserve_selection(self.view):
+                self.clear()
+                items = commands.get_all_assets()
+                self.add_items(items)
 
         return len(items) > 0
 
     def get_selected_assets(self):
         """Add all selected items from the current scene"""
 
-        self.clear()
-        items = commands.get_items_from_selection()
-        self.add_items(items)
+        with preserve_expanded_rows(self.view):
+            with preserve_selection(self.view):
+                self.clear()
+                items = commands.get_items_from_selection()
+                self.add_items(items)
 
     def select_asset_from_items(self):
         """Select nodes from listed asset"""
@@ -148,18 +154,23 @@ class LookOutliner(QtWidgets.QWidget):
         layout.setSpacing(10)
 
         # Looks from database
-        title = QtWidgets.QLabel("Look Assignment")
+        title = QtWidgets.QLabel("Looks")
         title.setAlignment(QtCore.Qt.AlignCenter)
         title.setStyleSheet("font-weight: bold; font-size: 12px")
         title.setAlignment(QtCore.Qt.AlignCenter)
 
         model = models.LookModel()
 
+        # Proxy for dynamic sorting
+        proxy = QtCore.QSortFilterProxyModel()
+        proxy.setSourceModel(model)
+
         view = views.View()
-        view.setModel(model)
+        view.setModel(proxy)
         view.setMinimumHeight(180)
         view.setToolTip("Use right mouse button menu for direct actions")
         view.customContextMenuRequested.connect(self.right_mouse_menu)
+        view.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
         layout.addWidget(title)
         layout.addWidget(view)
@@ -307,25 +318,30 @@ class QueueWidget(QtWidgets.QWidget):
 
         """
 
+        # Collect the looks we want to apply (by name)
+        subsets = {look["subset"] for look in looks}
+
+        # Generate a queue item for every asset/look combination
         items = []
-
-        # Restructure looks
-        matches = self._reconstruct_looks(looks)
         for asset in assets:
-            view_name = asset["asset"]
-            asset_name = asset["asset_name"]
-            match = matches.get(asset_name, None)
-            if match is None:
-                self.log.warning("No looks for %s" % asset_name)
-                continue
 
-            # Create new item by copying the match
-            items.append({"asset": view_name,
-                          "asset_name": asset_name,
-                          "version_name": match["name"],
-                          "subset": match["subset"],
-                          "version": match,
-                          "nodes": asset["nodes"]})
+            for look_subset in asset["looks"]:
+                if look_subset["name"] in subsets:
+
+                    asset_name = asset["asset"]["name"]
+
+                    # Get the latest version of this asset's look subset
+                    version = io.find_one({"type": "version",
+                                           "parent": look_subset["_id"]},
+                                          sort=[("name", -1)])
+
+                    # Create new item by copying the match
+                    # TODO: should we collect nodes from selection?
+                    items.append({"asset": asset_name,
+                                  "asset_name": asset_name,
+                                  "subset": look_subset,
+                                  "nodes": asset["nodes"],
+                                  "version": version})
 
         return items
 
@@ -443,7 +459,7 @@ class QueueWidget(QtWidgets.QWidget):
 
         assert ext == "*.json", "Wrong file type"
 
-        queued_items = self._get_queued_items()
+        queued_items = self.get_items()
         if not queued_items:
             self.log.error("No queued items to store")
             return
@@ -514,25 +530,3 @@ class QueueWidget(QtWidgets.QWidget):
         menu.addAction(clear_action)
 
         menu.exec_(globalpos)
-
-    def _reconstruct_looks(self, looks):
-        """
-        Reconstruct data
-        Args:
-            looks (list): list of dicts
-
-        Returns:
-            dict
-        """
-
-        look_lookup = {}
-
-        for look in looks:
-            match_dict = look["matches"]
-            assets = match_dict.keys()
-            for asset in assets:
-                match = match_dict[asset]
-                match["subset"] = look["subset"]
-                look_lookup[asset] = match
-
-        return look_lookup

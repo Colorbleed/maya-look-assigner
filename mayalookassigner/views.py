@@ -11,8 +11,7 @@ class View(QtWidgets.QTreeView):
         super(View, self).__init__(parent=parent)
 
         # view settings
-        self.setIndentation(6)
-        self.setAlternatingRowColors(True)
+        self.setAlternatingRowColors(False)
         self.setSortingEnabled(True)
         self.setSelectionMode(self.ExtendedSelection)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
