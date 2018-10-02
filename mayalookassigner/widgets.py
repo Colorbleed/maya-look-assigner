@@ -129,31 +129,30 @@ class AssetOutliner(QtWidgets.QWidget):
         assets = dict()
         asset_namespaces = defaultdict(set)
         for item in items:
-            asset = item["asset"]["name"]
-            asset_namespaces[asset].add(item.get("namespace"))
+            asset_id = str(item["asset"]["_id"])
+            asset_name = item["asset"]["name"]
+            asset_namespaces[asset_name].add(item.get("namespace"))
 
-            if asset in assets:
+            if asset_name in assets:
                 continue
 
-            assets[asset] = item
-            assets[asset]["nodes"] = id_nodes.get(str(item["asset"]["_id"]),
-                                                  [])
+            assets[asset_name] = item
+            assets[asset_name]["nodes"] = id_nodes.get(asset_id, [])
 
         # Filter nodes to namespace (if only namespaces were selected)
-        for asset in assets:
-            namespaces = asset_namespaces[asset]
+        for asset_name in assets:
+            namespaces = asset_namespaces[asset_name]
 
-            # When None is present the all namespaces should be assigned.
+            # When None is present there should be no filtering
             if None in namespaces:
-                namespaces = None
+                continue
 
-            # If namespaces are selected and *not* the top entry we should
-            # filter to assign only to those namespaces.
-            if namespaces:
-                nodes = assets[asset]["nodes"]
-                nodes = [node for node in nodes if
-                         commands.get_namespace_from_node(node) in namespaces]
-                assets[asset]["nodes"] = nodes
+            # Else only namespaces are selected and *not* the top entry so
+            # we should filter to only those namespaces.
+            nodes = assets[asset_name]["nodes"]
+            nodes = [node for node in nodes if
+                     commands.get_namespace_from_node(node) in namespaces]
+            assets[asset_name]["nodes"] = nodes
 
         return assets
 
