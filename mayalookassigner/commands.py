@@ -144,10 +144,10 @@ def create_items_from_nodes(nodes):
             log.warning("Nodes: %s" % id_nodes)
             continue
 
-        # Collect look subsets for this asset
+        # Collect available look subsets for this asset
         looks = cblib.list_looks(asset["_id"])
 
-        # Collect nodes per namespaces
+        # Collect namespaces the asset is found in
         namespaces = set()
         for node in id_nodes:
             namespace = get_namespace_from_node(node)
