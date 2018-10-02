@@ -1,11 +1,14 @@
 from collections import defaultdict
 from avalon.tools.cbsceneinventory import model
 
+from avalon.vendor.Qt import QtCore
+from avalon.vendor import qtawesome
+from avalon.style import colors
+
 
 class AssetModel(model.TreeModel):
 
-    COLUMNS = ["asset"]
-    NAMESPACE = False
+    COLUMNS = ["label"]
 
     def add_items(self, items):
         """
@@ -19,10 +22,30 @@ class AssetModel(model.TreeModel):
 
         self.beginResetModel()
 
-        for item in items:
-            item_node = model.Node()
-            item_node.update(item)
-            self.add_child(item_node)
+        # Add the items sorted by label
+        sorter = lambda x: x["label"]
+
+        for item in sorted(items, key=sorter):
+
+            asset_item = model.Node()
+            asset_item.update(item)
+            asset_item["icon"] = "folder"
+
+            # Add namespace children
+            namespaces = item["namespaces"]
+            for namespace in sorted(namespaces):
+                child = model.Node()
+                child.update(item)
+                child.update({
+                    "label": (namespace if namespace != ":"
+                              else "(no namespace)"),
+                    "namespace": namespace,
+                    "looks": item["looks"],
+                    "icon": "folder-o"
+                })
+                asset_item.add_child(child)
+
+            self.add_child(asset_item)
 
         self.endResetModel()
 
@@ -34,17 +57,33 @@ class AssetModel(model.TreeModel):
         if role == model.TreeModel.NodeRole:
             node = index.internalPointer()
             return node
+
+        # Add icon
+        if role == QtCore.Qt.DecorationRole:
+            if index.column() == 0:
+                node = index.internalPointer()
+                icon = node.get("icon")
+                if icon:
+                    return qtawesome.icon("fa.{0}".format(icon),
+                                          color=colors.default)
 
         return super(AssetModel, self).data(index, role)
 
 
 class LookModel(model.TreeModel):
+    """Model displaying a list of looks and matches for assets"""
 
-    COLUMNS = ["subset", "match"]
+    COLUMNS = ["label", "match"]
 
     def add_items(self, items):
-        """
-        Add items to model with needed data
+        """Add items to model with needed data
+
+        An item exists of:
+            {
+                "subset": 'name of subset',
+                "asset": asset_document
+            }
+
         Args:
             items(list): collection of item data
 
@@ -54,35 +93,28 @@ class LookModel(model.TreeModel):
 
         self.beginResetModel()
 
-        subsets = defaultdict(list)
-        for item in items:
-            subsets[item["subset"]].append(item)
+        # Collect the assets per look name (from the items of the AssetModel)
+        look_subsets = defaultdict(list)
+        for asset_item in items:
+            asset = asset_item["asset"]
+            for look in asset_item["looks"]:
+                look_subsets[look["name"]].append(asset)
 
-        for subset, assets in sorted(subsets.iteritems()):
+        for subset, assets in sorted(look_subsets.iteritems()):
+
+            # Define nice label without "look" prefix for readability
+            label = subset if not subset.startswith("look") else subset[4:]
 
             item_node = model.Node()
-
+            item_node["label"] = label
             item_node["subset"] = subset
+
+            # Amount of matching assets for this look
             item_node["match"] = len(assets)
-            item_node["matches"] = {asset["asset_name"]: asset["version"]
-                                    for asset in assets}
+
+            # Store the assets that have this subset available
+            item_node["assets"] = assets
 
             self.add_child(item_node)
 
         self.endResetModel()
-
-
-class QueueModel(AssetModel):
-
-    COLUMNS = ["asset", "subset", "version_name"]
-
-    def data(self, index, role):
-
-        if not index.isValid():
-            return
-
-        if role == model.TreeModel.NodeRole:
-            node = index.internalPointer()
-            return node
-
-        return super(AssetModel, self).data(index, role)

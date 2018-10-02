@@ -1,6 +1,4 @@
 from collections import defaultdict
-from copy import deepcopy
-import json
 import logging
 import os
 
@@ -8,7 +6,6 @@ import maya.cmds as cmds
 
 import colorbleed.maya.lib as cblib
 from avalon import io, api
-
 
 log = logging.getLogger(__name__)
 
@@ -36,8 +33,8 @@ def get_namespace_from_node(node):
         namespace (str)
 
     """
-    _, ns = cmds.ls(node, showNamespace=True)
-    return ns
+    parts = node.rsplit("|", 1)[-1].rsplit(":", 1)
+    return parts[0] if len(parts) > 1 else u":"
 
 
 def list_descendents(nodes):
@@ -62,21 +59,17 @@ def list_descendents(nodes):
             return result
 
 
-def get_items_from_selection():
+def get_selected_nodes():
     """Get information from current selection"""
 
-    items = []
     selection = cmds.ls(selection=True, long=True)
     hierarchy = list_descendents(selection)
     nodes = list(set(selection + hierarchy))
 
-    view_items = create_items_from_selection(nodes)
-    items.extend(view_items)
-
-    return items
+    return nodes
 
 
-def get_all_assets():
+def get_all_asset_nodes():
     """Get all assets from the scene, container based
 
     Returns:
@@ -85,21 +78,17 @@ def get_all_assets():
 
     host = api.registered_host()
 
-    items = []
+    nodes = []
     for container in host.ls():
         # We are not interested in looks but assets!
         if container["loader"] == "LookLoader":
             continue
+
         # Gather all information
         container_name = container["objectName"]
-        content = cmds.sets(container_name, query=True)
-        view_items = create_items_from_selection(content)
-        if not view_items:
-            continue
+        nodes += cmds.sets(container_name, query=True, nodesOnly=True) or []
 
-        items.extend(view_items)
-
-    return items
+    return nodes
 
 
 def create_asset_id_hash(nodes):
@@ -122,7 +111,7 @@ def create_asset_id_hash(nodes):
     return dict(node_id_hash)
 
 
-def create_items_from_selection(content):
+def create_items_from_nodes(nodes):
     """Create an item for the view based the container and content of it
 
     It fetches the look document based on the asset ID found in the content.
@@ -132,7 +121,7 @@ def create_items_from_selection(content):
     it will log a warning message.
 
     Args:
-        content (list): list of items which are in the container or selection
+        nodes (list): list of maya nodes
 
     Returns:
         list of dicts
@@ -141,126 +130,35 @@ def create_items_from_selection(content):
 
     asset_view_items = []
 
-    id_hashes = create_asset_id_hash(content)
+    id_hashes = create_asset_id_hash(nodes)
     if not id_hashes:
         return asset_view_items
 
-    for _id, nodes in id_hashes.items():
-        document = io.find_one({"_id": io.ObjectId(_id)},
-                               projection={"name": True})
+    for _id, id_nodes in id_hashes.items():
+        asset = io.find_one({"_id": io.ObjectId(_id)},
+                            projection={"name": True})
 
         # Skip if asset id is not found
-        if not document:
+        if not asset:
             log.warning("Id not found in the database, skipping '%s'." % _id)
-            log.warning("Nodes: %s" % nodes)
+            log.warning("Nodes: %s" % id_nodes)
             continue
 
-        looks = fetch_looks(document)
-        namespace = get_namespace_from_node(nodes[0])
-        asset = "%s : %s" % (namespace, document["name"])
-        asset_view_items.append({"asset": asset,
-                                 "asset_name": document["name"],
-                                 "document": document,
+        # Collect available look subsets for this asset
+        looks = cblib.list_looks(asset["_id"])
+
+        # Collect namespaces the asset is found in
+        namespaces = set()
+        for node in id_nodes:
+            namespace = get_namespace_from_node(node)
+            namespaces.add(namespace)
+
+        asset_view_items.append({"label": asset["name"],
+                                 "asset": asset,
                                  "looks": looks,
-                                 "_id": _id,
-                                 "nodes": nodes})
+                                 "namespaces": namespaces})
+
     return asset_view_items
-
-
-def fetch_looks(document):
-    """Get all looks based on the asset id
-
-    Args:
-        document (dict): database object
-
-    Returns:
-        looks (list): looks per asset {asset_name : [look_data, look_data]}
-    """
-
-    publish_looks = []
-
-    # Get all data
-    asset_name = document["name"]
-    for subset in cblib.list_looks(document["_id"]):
-        version = io.find_one({"type": "version",
-                               "parent": subset["_id"]},
-                              projection={"name": True, "parent": True},
-                              sort=[("name", -1)])
-
-        publish_looks.append({"asset_name": asset_name,
-                              "subset": subset["name"],
-                              "version": version})
-
-    return publish_looks
-
-
-def process_queued_item(entry):
-    """
-    Build the correct assignment for the selected asset
-    Args:
-        entry (dict):
-
-    Returns:
-        None
-
-    """
-    # Assume content is stored under nodes, fallback to containers
-    nodes = entry.get("nodes", [])
-    assert nodes, ("Could not find any nodes in selection or from "
-                   "any containers")
-
-    cblib.assign_look_by_version(nodes, entry["version"]["_id"])
-
-
-def create_queue_out_data(queue_items):
-    """Create a JSON friendly block to write out
-
-    Args:
-        queue_items (list): list of dict
-
-    Returns:
-        list: list of dict
-
-    """
-
-    items = []
-    for item in queue_items:
-        # Ensure the io.ObjectId object is a string
-        new_item = deepcopy(item)
-        new_item["document"]["_id"] = str(item["document"]["_id"])
-        new_item["document"]["parent"] = str(item["document"]["parent"])
-        items.append(new_item)
-
-    return items
-
-
-def create_queue_in_data(queue_items):
-    """Create a database friendly data block for the tool
-
-    Args:
-        queue_items (list): list of dict
-
-    Returns:
-        list: list of dict
-    """
-    items = []
-    for item in queue_items:
-        new_item = deepcopy(item)
-        document = item["document"]
-        new_item["document"]["_id"] = io.ObjectId(document["_id"])
-        new_item["document"]["parent"] = io.ObjectId(document["parent"])
-        items.append(new_item)
-
-    return items
-
-
-def save_to_json(filepath, items):
-    """Store data in a json file"""
-
-    log.info("Writing queue file ...")
-    with open(filepath, "w") as fp:
-        json.dump(items, fp, ensure_ascii=False)
-    log.info("Successfully written file")
 
 
 def remove_unused_looks():
@@ -286,6 +184,7 @@ def remove_unused_looks():
                 unused.append(container)
 
     for container in unused:
-        log.warning("Removing unused look container: %s",
-                    container['objectName'])
+        log.info("Removing unused look container: %s", container['objectName'])
         api.remove(container)
+
+    log.info("Finished removing unused looks. (see log for details)")

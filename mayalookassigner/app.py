@@ -1,9 +1,15 @@
 import sys
+import time
 import logging
 
-from avalon import style
+import colorbleed.maya.lib as cblib
+
+from avalon import style, io
 from avalon.tools import lib
 from avalon.vendor.Qt import QtWidgets, QtCore
+
+from maya import cmds
+import maya.api.OpenMaya as om
 
 from . import widgets
 from . import commands
@@ -19,75 +25,85 @@ class App(QtWidgets.QWidget):
 
         self.log = logging.getLogger(__name__)
 
+        # Store callback references
+        self._callbacks = []
+
         filename = commands.get_workfile()
 
         self.setObjectName("lookManager")
-        self.setWindowTitle("Look Manager 1.2.1 - [{}]".format(filename))
+        self.setWindowTitle("Look Manager 1.3.0 - [{}]".format(filename))
         self.setWindowFlags(QtCore.Qt.Window)
         self.setParent(parent)
 
-        self.resize(1000, 500)
+        self.resize(750, 500)
 
         self.setup_ui()
 
         self.setup_connections()
 
+        # Force refresh check on initialization
+        self._on_renderlayer_switch()
+
     def setup_ui(self):
         """Build the UI"""
 
-        main_layout = QtWidgets.QHBoxLayout()
-        main_splitter = QtWidgets.QSplitter()
-        main_splitter.setStyleSheet("QSplitter{ border: 0px; }")
-
-        # Assets overview
+        # Assets (left)
         asset_outliner = widgets.AssetOutliner()
 
-        # Look manager part
-        look_manager_widget = QtWidgets.QWidget()
-        look_manager_layout = QtWidgets.QVBoxLayout()
-
-        look_splitter = QtWidgets.QSplitter()
-        look_splitter.setOrientation(QtCore.Qt.Vertical)
+        # Looks (right)
+        looks_widget = QtWidgets.QWidget()
+        looks_layout = QtWidgets.QVBoxLayout(looks_widget)
 
         look_outliner = widgets.LookOutliner()  # Database look overview
-        queue_widget = widgets.QueueWidget()  # Queue list overview
-        queue_widget.stack.setCurrentIndex(0)
 
-        look_splitter.addWidget(look_outliner)
-        look_splitter.addWidget(queue_widget)
-
-        default_buttons = QtWidgets.QHBoxLayout()
-        load_queue_btn = QtWidgets.QPushButton("Load Queue from File")
+        assign_selected = QtWidgets.QCheckBox("Assign to selected only")
+        assign_selected.setToolTip("Whether to assign only to selected nodes "
+                                   "or to the full asset")
         remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
-        default_buttons.addWidget(load_queue_btn)
-        default_buttons.addWidget(remove_unused_btn)
 
-        look_manager_layout.addWidget(look_splitter)
-        look_manager_layout.addLayout(default_buttons)
-        look_manager_widget.setLayout(look_manager_layout)
+        looks_layout.addWidget(look_outliner)
+        looks_layout.addWidget(assign_selected)
+        looks_layout.addWidget(remove_unused_btn)
 
-        look_splitter.setSizes([500, 0])
+        # Footer
+        status = QtWidgets.QStatusBar()
+        status.setSizeGripEnabled(False)
+        status.setFixedHeight(25)
+        warn_layer = QtWidgets.QLabel("Current Layer is not "
+                                      "defaultRenderLayer")
+        warn_layer.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        warn_layer.setStyleSheet("color: #DD5555; font-weight: bold;")
+        warn_layer.setFixedHeight(25)
+
+        footer = QtWidgets.QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(status)
+        footer.addWidget(warn_layer)
 
         # Build up widgets
+        main_layout = QtWidgets.QVBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_splitter = QtWidgets.QSplitter()
+        main_splitter.setStyleSheet("QSplitter{ border: 0px; }")
         main_splitter.addWidget(asset_outliner)
-        main_splitter.addWidget(look_manager_widget)
+        main_splitter.addWidget(looks_widget)
+        main_splitter.setSizes([350, 200])
         main_layout.addWidget(main_splitter)
+        main_layout.addLayout(footer)
 
         # Set column width
         asset_outliner.view.setColumnWidth(0, 200)
-        look_outliner.view.setColumnWidth(0, 200)
+        look_outliner.view.setColumnWidth(0, 150)
 
         # Open widgets
         self.asset_outliner = asset_outliner
         self.look_outliner = look_outliner
-        self.queue = queue_widget
-        self.look_splitter = look_splitter
+        self.status = status
+        self.warn_layer = warn_layer
 
-        # Open Buttons
+        # Buttons
         self.remove_unused = remove_unused_btn
-        self.load_queue = load_queue_btn
-
-        self.setLayout(main_layout)
+        self.assign_selected = assign_selected
 
     def setup_connections(self):
         """Connect interactive widgets with actions"""
@@ -95,12 +111,39 @@ class App(QtWidgets.QWidget):
         self.asset_outliner.selection_changed.connect(
             self.on_asset_selection_changed)
 
-        self.look_outliner.menu_queue_action.connect(self.on_queue_selected)
-        self.look_outliner.menu_apply_action.connect(self.on_process_selected)
-        self.queue.on_emptied.connect(self._on_queue_emptied)
+        self.asset_outliner.refreshed.connect(
+            lambda: self.echo("Loaded assets.."))
 
+        self.look_outliner.menu_apply_action.connect(self.on_process_selected)
         self.remove_unused.clicked.connect(commands.remove_unused_looks)
-        self.load_queue.clicked.connect(self.queue.load_queue)
+
+        # Maya renderlayer switch callback
+        callback = om.MEventMessage.addEventCallback(
+            "renderLayerManagerChange",
+            self._on_renderlayer_switch
+        )
+        self._callbacks.append(callback)
+
+    def closeEvent(self, event):
+
+        # Delete callbacks
+        for callback in self._callbacks:
+            om.MMessage.removeCallback(callback)
+
+        return super(App, self).closeEvent(event)
+
+    def _on_renderlayer_switch(self, *args):
+        """Callback that updates on Maya renderlayer switch"""
+
+        layer = cmds.editRenderLayerGlobals(query=True,
+                                            currentRenderLayer=True)
+        if layer != "defaultRenderLayer":
+            self.warn_layer.show()
+        else:
+            self.warn_layer.hide()
+
+    def echo(self, message):
+        self.status.showMessage(message, 1500)
 
     def refresh(self):
         """Refresh the content"""
@@ -114,7 +157,7 @@ class App(QtWidgets.QWidget):
     def on_asset_selection_changed(self):
         """Get selected items from asset loader and fill look outliner"""
 
-        items = self.asset_outliner.get_look_from_selected_items()
+        items = self.asset_outliner.get_selected_items()
         self.look_outliner.clear()
         self.look_outliner.add_items(items)
 
@@ -122,37 +165,47 @@ class App(QtWidgets.QWidget):
         """Process all selected looks for the selected assets"""
 
         assets = self.asset_outliner.get_selected_items()
-        assert assets, "No assets selected"
-        looks = self.look_outliner.get_selected_items()
-        items = self.queue.create_items(looks, assets)
+        assert assets, "No asset selected"
 
-        for item in items:
-            commands.process_queued_item(item)
+        # Collect the looks we want to apply (by name)
+        look_items = self.look_outliner.get_selected_items()
+        looks = {look["subset"] for look in look_items}
 
-    def on_queue_selected(self):
-        """Queue all selected looks for the selected assets"""
+        selection = self.assign_selected.isChecked()
+        asset_nodes = self.asset_outliner.get_nodes(selection=selection)
 
-        assets = self.asset_outliner.get_selected_items()
-        assert assets, "No assets selected"
-        looks = self.look_outliner.get_selected_items()
-        items = self.queue.create_items(looks, assets)
+        start = time.time()
+        for i, (asset, item) in enumerate(asset_nodes.items()):
 
-        self.queue.add_items(items)
-        self.look_splitter.setSizes([250, 250])
+            # Label prefix
+            prefix = "({}/{})".format(i+1, len(asset_nodes))
 
-    def on_process_queued(self):
-        """Process all queued items"""
-        self.queue.process_items()
+            # Assign the first matching look relevant for this asset
+            # (since assigning multiple to the same nodes makes no sense)
+            assign_look = next((subset for subset in item["looks"]
+                               if subset["name"] in looks), None)
+            if not assign_look:
+                self.echo("{} No matching selected "
+                          "look for {}".format(prefix, asset))
+                continue
 
-    def on_process_selected_queued(self):
-        """Apply currently selected looks to currently selected items"""
+            # Get the latest version of this asset's look subset
+            version = io.find_one({"type": "version",
+                                   "parent": assign_look["_id"]},
+                                  sort=[("name", -1)])
 
-        items = self.queue.get_selected_items()
-        for item in items:
-            commands.process_queued_item(item)
+            subset_name = assign_look["name"]
+            self.echo("{} Assigning {} to {}\t".format(prefix,
+                                                       subset_name,
+                                                       asset))
 
-    def _on_queue_emptied(self):
-        self.look_splitter.setSizes([500, 0])
+            # Assign look
+            cblib.assign_look_by_version(nodes=item["nodes"],
+                                         version_id=version["_id"])
+
+        end = time.time()
+
+        self.echo("Finished assigning.. ({0:.3f}s)".format(end - start))
 
 
 def show():
