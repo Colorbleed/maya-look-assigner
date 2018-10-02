@@ -93,7 +93,8 @@ class AssetOutliner(QtWidgets.QWidget):
         with preserve_expanded_rows(self.view):
             with preserve_selection(self.view):
                 self.clear()
-                items = commands.get_all_assets()
+                nodes = commands.get_all_asset_nodes()
+                items = commands.create_items_from_nodes(nodes)
                 self.add_items(items)
 
         return len(items) > 0
@@ -104,7 +105,8 @@ class AssetOutliner(QtWidgets.QWidget):
         with preserve_expanded_rows(self.view):
             with preserve_selection(self.view):
                 self.clear()
-                items = commands.get_items_from_selection()
+                nodes = commands.get_selected_nodes()
+                items = commands.create_items_from_nodes(nodes)
                 self.add_items(items)
 
     def select_asset_from_items(self):

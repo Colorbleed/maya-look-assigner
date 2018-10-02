@@ -1,6 +1,7 @@
 import sys
 import time
 import logging
+from collections import defaultdict
 
 from avalon import style, io
 from avalon.tools import lib
@@ -16,7 +17,7 @@ module = sys.modules[__name__]
 module.window = None
 
 
-def create_items(looks, assets):
+def create_items(looks, asset_items):
     """Create a queue item based on the selection
 
     Args:
@@ -31,26 +32,45 @@ def create_items(looks, assets):
     # Collect the looks we want to apply (by name)
     subsets = {look["subset"] for look in looks}
 
+    # Collect the asset item entries per asset
+    # and collect the namespaces we'd like to apply
+    # todo: can we get the combined namespace filter an easier way?
+    assets = dict()
+    asset_namespaces = defaultdict(set)
+    for item in asset_items:
+        asset = item["asset"]["name"]
+        asset_namespaces[asset].add(item.get("namespace"))
+
+        if asset in assets:
+            continue
+
+        assets[asset] = item
+
+    # Set the namespaces to assign per asset
+    for asset in assets:
+        namespaces = asset_namespaces[asset]
+        if None in namespaces:
+            # When None is present the all namespaces should be assigned.
+            namespaces = None
+
+        assets[asset]["namespaces"] = namespaces
+
     # Generate a queue item for every asset/look combination
     items = []
-    for asset in assets:
+    for asset in assets.values():
 
-        for look_subset in asset["looks"]:
-            if look_subset["name"] in subsets:
-
-                asset_name = asset["asset"]["name"]
+        # Iterate the available looks for the asset
+        for look in asset["looks"]:
+            if look["name"] in subsets:
 
                 # Get the latest version of this asset's look subset
                 version = io.find_one({"type": "version",
-                                       "parent": look_subset["_id"]},
+                                       "parent": look["_id"]},
                                       sort=[("name", -1)])
 
-                # Create new item by copying the match
-                # TODO: should we collect nodes from selection?
-                items.append({"asset": asset_name,
-                              "asset_name": asset_name,
-                              "subset": look_subset,
-                              "nodes": asset["nodes"],
+                items.append({"asset": asset["asset"],
+                              "subset": look,
+                              "namespaces": asset["namespaces"],
                               "version": version})
 
     return items
@@ -94,9 +114,13 @@ class App(QtWidgets.QWidget):
 
         look_outliner = widgets.LookOutliner()  # Database look overview
 
+        assign_selected = QtWidgets.QCheckBox("Assign to selected only")
+        assign_selected.setToolTip("Whether to assign only to selected nodes "
+                                   "or to the full asset")
         remove_unused_btn = QtWidgets.QPushButton("Remove Unused Looks")
 
         looks_layout.addWidget(look_outliner)
+        looks_layout.addWidget(assign_selected)
         looks_layout.addWidget(remove_unused_btn)
 
         # Footer
@@ -137,6 +161,7 @@ class App(QtWidgets.QWidget):
 
         # Buttons
         self.remove_unused = remove_unused_btn
+        self.assign_selected = assign_selected
 
     def setup_connections(self):
         """Connect interactive widgets with actions"""
@@ -202,17 +227,35 @@ class App(QtWidgets.QWidget):
         looks = self.look_outliner.get_selected_items()
         items = create_items(looks, assets)
 
+        selected = self.assign_selected.isChecked()
+
+        # Collect all nodes by hash (optimization)
+        if not selected:
+            nodes = cmds.ls(dag=True,  long=True)
+        else:
+            nodes = commands.get_selected_nodes()
+        id_nodes = commands.create_asset_id_hash(nodes)
+
         start = time.time()
         for i, item in enumerate(items):
 
-            asset_name = item["asset"]
+            nodes = id_nodes.get(str(item["asset"]["_id"]))
+
+            # If namespaces are selected and *not* the top entry we should
+            # filter to assign only to those namespaces.
+            namespaces = item.get("namespaces")
+            if namespaces:
+                nodes = [node for node in nodes if
+                         commands.get_namespace_from_node(node) in namespaces]
+
+            asset_name = item["asset"]["name"]
             subset_name = item["subset"]["name"]
             self.echo("({}/{}) Assigning {} to {}\t".format(i+1,
                                                             len(items),
                                                             subset_name,
                                                             asset_name))
 
-            commands.assign_item(item)
+            commands.assign_item(item, nodes=nodes)
         end = time.time()
 
         self.echo("Finished assigning.. ({0:.3f}s)".format(end - start))

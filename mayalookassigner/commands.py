@@ -59,17 +59,17 @@ def list_descendents(nodes):
             return result
 
 
-def get_items_from_selection():
+def get_selected_nodes():
     """Get information from current selection"""
 
     selection = cmds.ls(selection=True, long=True)
     hierarchy = list_descendents(selection)
     nodes = list(set(selection + hierarchy))
 
-    return create_items_from_nodes(nodes)
+    return nodes
 
 
-def get_all_assets():
+def get_all_asset_nodes():
     """Get all assets from the scene, container based
 
     Returns:
@@ -88,7 +88,7 @@ def get_all_assets():
         container_name = container["objectName"]
         nodes += cmds.sets(container_name, query=True, nodesOnly=True) or []
 
-    return create_items_from_nodes(nodes)
+    return nodes
 
 
 def create_asset_id_hash(nodes):
@@ -148,22 +148,21 @@ def create_items_from_nodes(nodes):
         looks = cblib.list_looks(asset["_id"])
 
         # Collect nodes per namespaces
-        namespaces = defaultdict(list)
+        namespaces = set()
         for node in id_nodes:
             namespace = get_namespace_from_node(node)
-            namespaces[namespace].append(node)
+            namespaces.add(namespace)
 
         asset_view_items.append({"label": asset["name"],
                                  "asset": asset,
                                  "looks": looks,
-                                 "namespaces": namespaces,
-                                 "nodes": id_nodes
+                                 "namespaces": namespaces
                                  })
 
     return asset_view_items
 
 
-def assign_item(item):
+def assign_item(item, nodes):
     """Assign the look for the item entry.
 
     Args:
@@ -173,10 +172,6 @@ def assign_item(item):
         None
 
     """
-    # Assume content is stored under nodes, fallback to containers
-    nodes = item.get("nodes", [])
-    assert nodes, ("Could not find any nodes in selection or from "
-                   "any containers")
 
     cblib.assign_look_by_version(nodes, item["version"]["_id"])
 

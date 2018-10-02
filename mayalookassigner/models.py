@@ -33,14 +33,13 @@ class AssetModel(model.TreeModel):
 
             # Add namespace children
             namespaces = item["namespaces"]
-            for namespace, namespace_nodes in sorted(namespaces.items()):
+            for namespace in sorted(namespaces):
                 child = model.Node()
                 child.update(item)
                 child.update({
                     "label": (namespace if namespace != ":"
                               else "(no namespace)"),
                     "namespace": namespace,
-                    "nodes": namespace_nodes,
                     "looks": item["looks"],
                     "icon": "folder-o"
                 })
