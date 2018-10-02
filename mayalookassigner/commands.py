@@ -156,24 +156,9 @@ def create_items_from_nodes(nodes):
         asset_view_items.append({"label": asset["name"],
                                  "asset": asset,
                                  "looks": looks,
-                                 "namespaces": namespaces
-                                 })
+                                 "namespaces": namespaces})
 
     return asset_view_items
-
-
-def assign_item(item, nodes):
-    """Assign the look for the item entry.
-
-    Args:
-        item (dict):
-
-    Returns:
-        None
-
-    """
-
-    cblib.assign_look_by_version(nodes, item["version"]["_id"])
 
 
 def remove_unused_looks():

@@ -1,7 +1,8 @@
 import sys
 import time
 import logging
-from collections import defaultdict
+
+import colorbleed.maya.lib as cblib
 
 from avalon import style, io
 from avalon.tools import lib
@@ -15,65 +16,6 @@ from . import commands
 
 module = sys.modules[__name__]
 module.window = None
-
-
-def create_items(looks, asset_items):
-    """Create a queue item based on the selection
-
-    Args:
-        looks (list): list of dicts with document information
-        assets (list): list of dicts with document information
-
-    Returns:
-        list: collection of look and asset data in dictionaries
-
-    """
-
-    # Collect the looks we want to apply (by name)
-    subsets = {look["subset"] for look in looks}
-
-    # Collect the asset item entries per asset
-    # and collect the namespaces we'd like to apply
-    # todo: can we get the combined namespace filter an easier way?
-    assets = dict()
-    asset_namespaces = defaultdict(set)
-    for item in asset_items:
-        asset = item["asset"]["name"]
-        asset_namespaces[asset].add(item.get("namespace"))
-
-        if asset in assets:
-            continue
-
-        assets[asset] = item
-
-    # Set the namespaces to assign per asset
-    for asset in assets:
-        namespaces = asset_namespaces[asset]
-        if None in namespaces:
-            # When None is present the all namespaces should be assigned.
-            namespaces = None
-
-        assets[asset]["namespaces"] = namespaces
-
-    # Generate a queue item for every asset/look combination
-    items = []
-    for asset in assets.values():
-
-        # Iterate the available looks for the asset
-        for look in asset["looks"]:
-            if look["name"] in subsets:
-
-                # Get the latest version of this asset's look subset
-                version = io.find_one({"type": "version",
-                                       "parent": look["_id"]},
-                                      sort=[("name", -1)])
-
-                items.append({"asset": asset["asset"],
-                              "subset": look,
-                              "namespaces": asset["namespaces"],
-                              "version": version})
-
-    return items
 
 
 class App(QtWidgets.QWidget):
@@ -223,39 +165,44 @@ class App(QtWidgets.QWidget):
         """Process all selected looks for the selected assets"""
 
         assets = self.asset_outliner.get_selected_items()
-        assert assets, "No assets selected"
-        looks = self.look_outliner.get_selected_items()
-        items = create_items(looks, assets)
+        assert assets, "No asset selected"
 
-        selected = self.assign_selected.isChecked()
+        # Collect the looks we want to apply (by name)
+        look_items = self.look_outliner.get_selected_items()
+        looks = {look["subset"] for look in look_items}
 
-        # Collect all nodes by hash (optimization)
-        if not selected:
-            nodes = cmds.ls(dag=True,  long=True)
-        else:
-            nodes = commands.get_selected_nodes()
-        id_nodes = commands.create_asset_id_hash(nodes)
+        selection = self.assign_selected.isChecked()
+        asset_nodes = self.asset_outliner.get_nodes(selection=selection)
 
         start = time.time()
-        for i, item in enumerate(items):
+        for i, (asset, item) in enumerate(asset_nodes.items()):
 
-            nodes = id_nodes.get(str(item["asset"]["_id"]))
+            # Label prefix
+            prefix = "({}/{})".format(i+1, len(asset_nodes))
 
-            # If namespaces are selected and *not* the top entry we should
-            # filter to assign only to those namespaces.
-            namespaces = item.get("namespaces")
-            if namespaces:
-                nodes = [node for node in nodes if
-                         commands.get_namespace_from_node(node) in namespaces]
+            # Assign the first matching look relevant for this asset
+            # (since assigning multiple to the same nodes makes no sense)
+            assign_look = next((subset for subset in item["looks"]
+                               if subset["name"] in looks), None)
+            if not assign_look:
+                self.echo("{} No matching selected "
+                          "look for {}".format(prefix, asset))
+                continue
 
-            asset_name = item["asset"]["name"]
-            subset_name = item["subset"]["name"]
-            self.echo("({}/{}) Assigning {} to {}\t".format(i+1,
-                                                            len(items),
-                                                            subset_name,
-                                                            asset_name))
+            # Get the latest version of this asset's look subset
+            version = io.find_one({"type": "version",
+                                   "parent": assign_look["_id"]},
+                                  sort=[("name", -1)])
 
-            commands.assign_item(item, nodes=nodes)
+            subset_name = assign_look["name"]
+            self.echo("{} Assigning {} to {}\t".format(prefix,
+                                                       subset_name,
+                                                       asset))
+
+            # Assign look
+            cblib.assign_look_by_version(nodes=item["nodes"],
+                                         version_id=version["_id"])
+
         end = time.time()
 
         self.echo("Finished assigning.. ({0:.3f}s)".format(end - start))

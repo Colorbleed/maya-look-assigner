@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from avalon.vendor.Qt import QtWidgets, QtCore
 
@@ -11,6 +12,8 @@ from avalon.tools.projectmanager.widget import (
 from . import models
 from . import commands
 from . import views
+
+from maya import cmds
 
 
 NODEROLE = QtCore.Qt.UserRole + 1
@@ -109,12 +112,57 @@ class AssetOutliner(QtWidgets.QWidget):
                 items = commands.create_items_from_nodes(nodes)
                 self.add_items(items)
 
+    def get_nodes(self, selection=False):
+        """Find the nodes in the current scene per asset."""
+
+        items = self.get_selected_items()
+
+        # Collect all nodes by hash (optimization)
+        if not selection:
+            nodes = cmds.ls(dag=True,  long=True)
+        else:
+            nodes = commands.get_selected_nodes()
+        id_nodes = commands.create_asset_id_hash(nodes)
+
+        # Collect the asset item entries per asset
+        # and collect the namespaces we'd like to apply
+        assets = dict()
+        asset_namespaces = defaultdict(set)
+        for item in items:
+            asset = item["asset"]["name"]
+            asset_namespaces[asset].add(item.get("namespace"))
+
+            if asset in assets:
+                continue
+
+            assets[asset] = item
+            assets[asset]["nodes"] = id_nodes.get(str(item["asset"]["_id"]),
+                                                  [])
+
+        # Filter nodes to namespace (if only namespaces were selected)
+        for asset in assets:
+            namespaces = asset_namespaces[asset]
+
+            # When None is present the all namespaces should be assigned.
+            if None in namespaces:
+                namespaces = None
+
+            # If namespaces are selected and *not* the top entry we should
+            # filter to assign only to those namespaces.
+            if namespaces:
+                nodes = assets[asset]["nodes"]
+                nodes = [node for node in nodes if
+                         commands.get_namespace_from_node(node) in namespaces]
+                assets[asset]["nodes"] = nodes
+
+        return assets
+
     def select_asset_from_items(self):
         """Select nodes from listed asset"""
 
+        items = self.get_nodes(selection=False)
         nodes = []
-        items = self.get_selected_items()
-        for item in items:
+        for item in items.values():
             nodes.extend(item["nodes"])
 
         commands.select(nodes)
