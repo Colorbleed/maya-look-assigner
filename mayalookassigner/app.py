@@ -9,6 +9,7 @@ from avalon.tools import lib
 from avalon.vendor.Qt import QtWidgets, QtCore
 
 from maya import cmds
+import maya.OpenMaya                # old api for MFileIO
 import maya.api.OpenMaya as om
 
 from . import widgets
@@ -34,6 +35,11 @@ class App(QtWidgets.QWidget):
         self.setWindowTitle("Look Manager 1.3.0 - [{}]".format(filename))
         self.setWindowFlags(QtCore.Qt.Window)
         self.setParent(parent)
+
+        # Force to delete the window on close so it triggers
+        # closeEvent only once. Otherwise it's retriggered when
+        # the widget gets garbage collected.
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
 
         self.resize(750, 500)
 
@@ -134,6 +140,11 @@ class App(QtWidgets.QWidget):
 
     def _on_renderlayer_switch(self, *args):
         """Callback that updates on Maya renderlayer switch"""
+
+        if maya.OpenMaya.MFileIO.isNewingFile():
+            # Don't perform a check during file open or file new as
+            # the renderlayers will not be in a valid state yet.
+            return
 
         layer = cmds.editRenderLayerGlobals(query=True,
                                             currentRenderLayer=True)
