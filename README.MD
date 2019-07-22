@@ -5,6 +5,6 @@ Each shader variation is listed based on the unique asset Id of the
 selected or all objects.
 
 ## Dependencies
-* Avalon
-* Colorbleed configuration for Avalon
+* [Avalon](https://github.com/getavalon/core)
+* [Colorbleed configuration for Avalon](https://github.com/Colorbleed/colorbleed-config)
 * Autodesk Maya 2016 and up
