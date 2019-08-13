@@ -100,8 +100,6 @@ class AssetOutliner(QtWidgets.QWidget):
                 items = commands.create_items_from_nodes(nodes)
                 self.add_items(items)
 
-        return len(items) > 0
-
     def get_selected_assets(self):
         """Add all selected items from the current scene"""
 

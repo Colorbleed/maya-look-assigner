@@ -86,7 +86,9 @@ def get_all_asset_nodes():
 
         # Gather all information
         container_name = container["objectName"]
-        nodes += cmds.sets(container_name, query=True, nodesOnly=True) or []
+        members = cmds.sets(container_name, query=True, nodesOnly=True) or []
+        members = cmds.ls(members, long=True, type="dagNode")
+        nodes += members
 
     return nodes
 
@@ -135,7 +137,15 @@ def create_items_from_nodes(nodes):
         return asset_view_items
 
     for _id, id_nodes in id_hashes.items():
-        asset = io.find_one({"_id": io.ObjectId(_id)},
+
+        try:
+            database_id = io.ObjectId(_id)
+        except io.InvalidId:
+            log.warning("Invalid ObjectId '%s' on nodes: %s" %
+                        (_id, id_nodes))
+            continue
+
+        asset = io.find_one({"_id": database_id},
                             projection={"name": True})
 
         # Skip if asset id is not found
