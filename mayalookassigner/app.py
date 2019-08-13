@@ -14,6 +14,7 @@ import maya.api.OpenMaya as om
 
 from . import widgets
 from . import commands
+from .version import version
 
 module = sys.modules[__name__]
 module.window = None
@@ -32,7 +33,10 @@ class App(QtWidgets.QWidget):
         filename = commands.get_workfile()
 
         self.setObjectName("lookManager")
-        self.setWindowTitle("Look Manager 1.3.0 - [{}]".format(filename))
+        self.setWindowTitle("Look Manager {version} - [{filename}]".format(
+            version=version,
+            filename=filename
+        ))
         self.setWindowFlags(QtCore.Qt.Window)
         self.setParent(parent)
 
