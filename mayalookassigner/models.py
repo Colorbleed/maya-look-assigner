@@ -1,14 +1,14 @@
 from collections import defaultdict
-from avalon.tools.cbsceneinventory import model
+from avalon.tools import models
 
 from avalon.vendor.Qt import QtCore
 from avalon.vendor import qtawesome
 from avalon.style import colors
 
 
-class AssetModel(model.TreeModel):
+class AssetModel(models.TreeModel):
 
-    COLUMNS = ["label"]
+    Columns = ["label"]
 
     def add_items(self, items):
         """
@@ -27,14 +27,14 @@ class AssetModel(model.TreeModel):
 
         for item in sorted(items, key=sorter):
 
-            asset_item = model.Node()
+            asset_item = models.Item()
             asset_item.update(item)
             asset_item["icon"] = "folder"
 
             # Add namespace children
             namespaces = item["namespaces"]
             for namespace in sorted(namespaces):
-                child = model.Node()
+                child = models.Item()
                 child.update(item)
                 child.update({
                     "label": (namespace if namespace != ":"
@@ -54,15 +54,15 @@ class AssetModel(model.TreeModel):
         if not index.isValid():
             return
 
-        if role == model.TreeModel.NodeRole:
-            node = index.internalPointer()
-            return node
+        if role == models.TreeModel.ItemRole:
+            item = index.internalPointer()
+            return item
 
         # Add icon
         if role == QtCore.Qt.DecorationRole:
             if index.column() == 0:
-                node = index.internalPointer()
-                icon = node.get("icon")
+                item = index.internalPointer()
+                icon = item.get("icon")
                 if icon:
                     return qtawesome.icon("fa.{0}".format(icon),
                                           color=colors.default)
@@ -70,10 +70,10 @@ class AssetModel(model.TreeModel):
         return super(AssetModel, self).data(index, role)
 
 
-class LookModel(model.TreeModel):
+class LookModel(models.TreeModel):
     """Model displaying a list of looks and matches for assets"""
 
-    COLUMNS = ["label", "match"]
+    Columns = ["label", "match"]
 
     def add_items(self, items):
         """Add items to model with needed data
@@ -105,16 +105,16 @@ class LookModel(model.TreeModel):
             # Define nice label without "look" prefix for readability
             label = subset if not subset.startswith("look") else subset[4:]
 
-            item_node = model.Node()
-            item_node["label"] = label
-            item_node["subset"] = subset
+            item = models.Item()
+            item["label"] = label
+            item["subset"] = subset
 
             # Amount of matching assets for this look
-            item_node["match"] = len(assets)
+            item["match"] = len(assets)
 
             # Store the assets that have this subset available
-            item_node["assets"] = assets
+            item["assets"] = assets
 
-            self.add_child(item_node)
+            self.add_child(item)
 
         self.endResetModel()
