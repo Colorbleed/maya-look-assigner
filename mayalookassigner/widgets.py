@@ -3,11 +3,7 @@ from collections import defaultdict
 
 from avalon.vendor.Qt import QtWidgets, QtCore
 
-# TODO: expose this better in avalon core
-from avalon.tools.projectmanager.widget import (
-    preserve_selection,
-    preserve_expanded_rows
-)
+from avalon.tools.lib import preserve_expanded_rows, preserve_selection
 
 from . import models
 from . import commands
